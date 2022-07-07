@@ -1,0 +1,263 @@
+---
+title: "Midterms"
+author: "Martin Ho"
+date: "10/23/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Question 1
+
+### (a)
+
+```{r}
+UScrime <- read.csv("UScrime.csv")
+str(UScrime)
+which.max(UScrime$Crime)
+UScrime$States[26]
+which.min(UScrime$Ineq)
+UScrime$States[6]
+```
+
+### (b)
+
+```{r}
+sub <- subset(UScrime, UScrime$Wealth > 5000)
+mean(sub$Crime)
+
+sub2 <- subset(UScrime, UScrime$Wealth < 5000)
+mean(sub2$Crime)
+```
+
+### (c) & (d)
+
+```{r}
+t.test(sub$Wealth, sub2$Wealth, alternative="two.sided")
+```
+
+### (e)
+
+```{r}
+# subset data
+UStrain <- subset(UScrime[4:47, ], select=-States)
+
+# Model
+lm.model1 <- lm(Crime ~ Wealth-1, data=UStrain)
+summary(lm.model1)
+```
+
+### (f)
+
+```{r}
+UStest <- subset(UScrime[1:3, ], select=-States)
+lm.model1.pred <- predict(lm.model1, newdata=UStest)
+confint(lm.model1, level=0.90)
+UStest$Wealth[3]*0.1529805
+UStest$Wealth[3]*0.1851697
+lm.model1.pred
+```
+
+### (g)
+
+```{r}
+lm.model1a <- lm(Wealth ~., data=UStrain)
+summary(lm.model1a)
+```
+
+### (h)
+
+```{r}
+lm.model1b <- lm(Crime ~Ineq-1, data=UStrain)
+summary(lm.model1b)
+```
+
+### (j)
+
+```{r}
+library(leaps)
+best.model1 <- regsubsets(Crime ~., data=UStrain, nvmax=ncol(UStrain))
+summary(best.model1)
+
+best <- which.max(summary(best.model1)$adjr2)
+best
+
+summary(best.model1)$adjr2[best]
+```
+
+### (k)
+
+```{r}
+best <- which.min(summary(best.model1)$bic)
+best
+
+summary(best.model1)$bic[best]
+```
+
+#### (l)
+
+```{r}
+predict.regsubsets=function(object,newdata,id,...){
+  form=as.formula(object$call[[2]])
+  mat=model.matrix(form,newdata)
+  coefi=coef(object,id=id)
+  xvars =names(coefi)
+  mat[,xvars]%*%coefi
+}
+
+adjr.model1 <- lm(Crime ~M+Ed+Po1+M.F+U1+U2+Wealth+Ineq+Prob, data=UStrain)
+summary(adjr.model1)
+bic.model1 <- lm(Crime ~M+Ed+Po1+U2+Ineq+Prob, data=UStrain)
+summary(bic.model1)
+
+adjr.pred <- predict(adjr.model1, newdata=UStest)
+bic.pred <- predict(bic.model1, newdata=UStest)
+
+adjr.rss <- sum(adjr.pred-UScrime[1:3,]$Crime)^2
+adjr.rss
+bic.rss <- sum(bic.pred-UScrime[1:3,]$Crime)^2
+bic.rss
+```
+
+### (n)
+
+```{r}
+naming <- UScrime$States
+UScrime2 <- subset(UScrime, select=-c(States, Crime))
+rownames(UScrime2) <- naming
+str(UScrime2)
+```
+
+### (m)
+
+```{r}
+pr.model1 <- prcomp(UScrime2, scale=T)
+summary(pr.model1)
+```
+
+### (p)
+
+```{r}
+pc1 <- abs(pr.model1$rotation[, 1])
+pr.model1$rotation[, 1]
+```
+
+### (q)
+
+```{r}
+order(pr.model1$x[, 1], decreasing=T)
+pr.model1$x[26, 1]
+pr.model1$x[4, 1]
+pr.model1$x[, 1]
+```
+
+### (r)
+
+```{r}
+order(UScrime$Crime, decreasing=T)
+```
+
+
+## Question 2
+
+### (a)
+
+```{r}
+transport <- read.csv("transport.csv")
+str(transport)
+tapply(transport$CHOICE, transport$MODE, sum)
+```
+
+### (b)
+
+Paper answer
+
+### (c)
+
+```{r}
+set.seed(2020)
+spl <- sample(210, 0.7*210)
+training <- subset(transport, is.element(ID, spl))
+training
+testing <- subset(transport, !is.element(ID, spl))
+testing
+```
+
+### (d)
+
+```{r}
+tapply(training$CHOICE, training$MODE, sum)
+```
+
+### (e)
+
+```{r}
+library(mlogit)
+data.train <- mlogit.data(training, choice="CHOICE", shape="long", alt.var="MODE")
+
+logit.model2 <- mlogit(CHOICE ~GC+TTME+HINC, data=data.train, reflevel="1")
+summary(logit.model2)
+
+-2*-142.67+2*3
+```
+
+### (f)
+
+```{r}
+logit.model2a <- mlogit(CHOICE ~GC+TTME+HINC-1, data=data.train)
+summary(logit.model2a)
+
+-2*-184.46+2*3
+```
+
+### (j)
+
+```{r}
+data.test <- mlogit.data(testing, choice="CHOICE", shape="long", alt.var="MODE")
+
+probs <- predict(logit.model2, newdata=data.test)
+
+logodds <- 0
+
+for (i in seq_along(dim(probs)[1])) {
+  logodds <- logodds + log(probs[i, preds[i]])
+}
+logodds
+```
+
+### (k)
+
+```{r}
+tapply(testing$CHOICE, testing$MODE, sum)
+```
+
+### (l)
+
+```{r}
+colSums(probs)
+```
+
+### (m)
+
+```{r}
+preds <- apply(probs, 1, which.max)
+table(preds)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
