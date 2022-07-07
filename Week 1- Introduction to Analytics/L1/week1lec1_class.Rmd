@@ -1,0 +1,136 @@
+---
+title: "Week 1 Lecture 1: R Basics"
+author: "Stefano Galelli"
+date: "Term 5, 2022"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+    toc: yes
+    toc_depth: 2
+    number_sections: yes
+---
+
+# Preliminaries
+
+Check [bookdown](http://bookdown.org) for R Markdown and other information, tutorial on R and R studio.
+
+## R environment in R Markdown
+
+Use `ctrl+alt+i` to create the R environment
+
+## Current directory
+
+## Help function
+
+## Set directory
+   Setting the current working directory
+
+## List the files in a directory
+
+
+## List objects 
+  Listing objects stored in the R workspace
+
+## Variable assignments
+
+Assign a number to a variable.
+
+Alternative to assigning a number to a variable. In general '<-' is preferred for assignment.
+
+## Common functions 
+   exponential, inverse, power, addition
+
+    
+## Remove variables from the workspace
+
+# Numbers and vectors
+
+## Concatenation
+   Concatenate (combine) numbers to form a vector
+
+## Accessing elements
+   Access specific elements of the vector
+
+## Applying operations to a vector 
+   term by term inverse, concatenate vectors, exponentiation
+
+You can overload the sum operator by recycling the shorter vector - mathematically adding vectors of different sizes are not permitted 
+
+
+## Maximum and minimum
+Finding the maximum and minimum elements and identifying the location (index) of the first max and all max
+
+
+## Other operations 
+  - sum, product, mean, variance, standard deviation
+
+
+For a vector, *summary* it provides a six number summary including min, max, mean, 1st quartile, median and 3rd quartile. This can be used with other objects too.
+
+## Maximum entry in a concatenated vector
+
+## Parallel maximum
+
+
+Parallel maximum returns a vector of length equal to the longest argument that contains in each element, the largest element in that position of any of the vector.
+
+## Generating vectors using a variety of commands
+
+## Return logical vector based on the check
+
+
+## Dealing with missing entries 
+
+## Differences in assignments
+   Using <- vs = vs ==.
+
+   
+
+# Classes or types
+
+R stores objects in a variety of classes - *numeric, integer, character, logical, list, matrix, dataframe* and has logical overriding operations when you convert from one class to another.
+
+## Variety of classes
+
+
+
+## Factors 
+
+
+## The function apply
+  The functions apply, sapply and tapply are very useful
+
+
+## Matrix and arrays
+
+### Matrix operations
+
+### Array operations
+
+
+### Other operations with matrices
+
+### Matrix multiplication
+
+### Solutions of linear equations
+
+### Eigen decomposition of a matrix
+Find $\lambda$ (eigenvalues) such that $|A_\lambda I|=0$ and corresponding $\boldsymbol{x}$ (eigenvectors) such that $A\boldsymbol{x}=\lambda \boldsymbol{x}$.
+
+
+## Lists 
+List consists of an ordered collection of objects that can be of different or the same type.
+
+
+
+## Dataframes
+
+Dataframes are a tightly coupled collection of variables that share many of the properties of matrices and lists and is the fundamental data structure that will be used in most of this course.
+
+
+## Tibbles and dyplr
+.... not complete
+
+
+END OF LECTURE 1.
