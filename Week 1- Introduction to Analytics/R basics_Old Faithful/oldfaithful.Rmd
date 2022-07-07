@@ -1,0 +1,113 @@
+---
+title: "Week 1 Lecture 2: Old Faithful Notebook"
+author: "Stefano Galelli"
+date: "Term 5, 2022"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+    toc: yes
+    toc_depth: 2
+    number_sections: yes
+---
+# Data sets
+
+## List datasets available in R
+
+```{r}
+data()
+```
+
+## Load the Old Faithful Geyser dataset
+```{r}
+data(faithful)
+ls()
+?faithful
+```
+
+Display (compactly) the internal structure of the R object - here it is a dataframe with 272 observations and 2 variables
+```{r}
+str(faithful)
+```
+
+
+The **Old Faithful Geyser** is a hot spring that occasionally becomes unstable and erupts hot water and steam into the air. The Old Faithful Geyser is at Yellowstone Park, Wyoming.
+
+# Visualisation
+
+## Scatter plot
+```{r}
+library(ggplot2)
+qplot(eruptions,waiting,data=faithful)
+```
+
+## Histogram
+```{r}
+qplot(eruptions,data=faithful)
+# a1<-ggplot(faithful,aes(eruptions))
+# a1+geom_histogram(binwidth = .3,color="blue",fill="yellow") 
+```
+
+## Time series plot*
+```{r}
+index=1:length(faithful$eruptions)
+# index
+
+qplot(index,eruptions,data=faithful,geom="line",xlab="Index")
+qplot(index,waiting,data=faithful,geom="line",xlab="Index")
+
+# ggplot(faithful)+geom_line(aes(x=1:length(eruptions),y=eruptions))+xlab("Index")
+# ggplot(faithful)+geom_line(aes(x=1:length(waiting),y=waiting))+xlab("Index")
+```
+
+## Empirical cdf plot for eruptions*
+```{r}
+a1<-ggplot(faithful,aes(eruptions))
+a1+stat_ecdf() + ggtitle("Empirical CDF of eruptions") 
+```
+
+## Normal quantile plots
+```{r}
+qplot(sample=eruptions,data=faithful,geom="qq")
+qplot(sample=eruptions,data=subset(faithful,eruptions>3),geom="qq")
+qplot(sample=eruptions,data=subset(faithful,eruptions<=3),geom="qq")
+
+# ggplot(faithful,aes(sample=eruptions))+stat_qq()+ggtitle("Normal QQ plot of eruptions") 
+# ggplot(subset(faithful,eruptions>3),aes(sample=eruptions))+stat_qq()+ggtitle("Normal QQ plot of eruptions which are >3")# 
+# ggplot(subset(faithful,eruptions<=3),aes(sample=eruptions))+stat_qq()+ggtitle("Normal QQ plot of eruptions which are <=3") 
+```
+
+
+## Certain observations from the plots 
+
+1. Eruption times and the waiting times between successive eruptions exhibit highly oscillatory behavior, low followed by high and high followed by low.
+2. Eruption times have a bimodal distribution.
+3. Lower eruption times are followed by lower waiting times. Higher eruption times are followed by higher waiting times. This can be used to predict when the next geyser eruption will occur. For example, during a short eruption, less water and heat are used and so both are restored in shorter time. During longer eruptions, more time is needed to rebuild.
+
+## T-test and finding confidence intervals**
+
+1. Performs a one sample t-test to test the hypothesis that the mean of waiting time $\mu = \mu_0$ and derives the 95% confidence interval for the mean parameter. (Note the goal is more to find the confidence interval here.)
+
+```{r}
+mean(faithful$waiting)
+
+faithful1 <- subset(faithful,faithful$eruptions <= 3)
+faithful2 <- subset(faithful,faithful$eruptions > 3)
+
+summary(faithful1$waiting)
+?t.test
+# str(faithful1)
+t.test(faithful1$waiting,mu=71)
+t.test(faithful2$waiting,mu=71)
+t.test(faithful2$waiting,mu=71,conf.level=.99)
+```
+
+## Two sample t-test
+
+```{r}
+t.test(faithful1$waiting,faithful2$waiting)
+```
+
+2. With 95% confidence, if the eruption time < 3, the average waiting time is between 53.32 and 55.67.
+3. With 95% confidence, if the eruption time >= 3, the average waiting time is between 79.10 and 80.88.
+4. With 95% confidence, the difference between the average waiting time for the two categories is between -26.97 and -24.02.
