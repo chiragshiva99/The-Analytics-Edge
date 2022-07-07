@@ -1,0 +1,5 @@
+
+*.metadata
+.Rproj.user
+*.Rproj
+*.url
