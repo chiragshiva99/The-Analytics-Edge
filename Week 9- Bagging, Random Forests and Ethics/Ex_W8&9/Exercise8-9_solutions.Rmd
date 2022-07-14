@@ -1,0 +1,748 @@
+---
+title: "Week 8-9 Exercise Solutions"
+output:
+  pdf_document:
+    template: footmiscbeforehyperref.tex # footmisc, and spacing adjustments
+    fig_caption: true
+    highlight: tango
+  html_document: 
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    highlight: tango
+geometry: margin=1in
+fontsize: 12pt
+linkcolor: blue
+header-includes:
+  - \usepackage{mathtools}  # for pmatrix*
+  - \usepackage[sfdefault]{FiraSans}  # any font would work
+  - \usepackage[T1]{fontenc}
+  - \renewcommand*\oldstylenums[1]{{\firaoldstyle \#1}}
+  - \usepackage{needspace}  # for nice page spaces
+  - \setlength\footnotemargin{0.4em}  # not inside template
+  - \newcommand{\specialcell}[2][c]{\begin{tabular}[#1]{@{}c@{}}#2\end{tabular}}  # to multiline text in tabular
+  - \usepackage{sectsty} \sectionfont{\centering\LARGE}\subsectionfont{\large}  # to change header fonts in PDF
+  - \usepackage{hyperref}  # load after everything else
+editor_options: 
+  chunk_output_type: inline
+---
+
+<style type="text/css">
+h1 {
+  text-align: center;
+}
+h2 {
+  font-size: 24px
+}
+h3 {
+  font-size: 20px
+}
+</style>
+
+```{r setup1, include=FALSE}
+SETUP_start_time <- Sys.time()  # to measure knitting time
+
+knitr::opts_knit$set(global.par = TRUE)
+knitr::opts_chunk$set(echo = TRUE)
+SETUP_LATEX_FLAG <- knitr::is_latex_output()  # to differentiate HTML/PDF output
+
+# From write_matex2 by https://stackoverflow.com/a/54088015
+SETUP_rmat_to_tex <- function(x, IS_LATEX=SETUP_LATEX_FLAG) {
+  if (IS_LATEX) {
+    begin <- "\\begin{pmatrix*}[r]"
+    end <- "\\end{pmatrix*}"
+  } else {
+    begin <- "\\begin{pmatrix}"  # there is no MathTools in MathJax
+    end <- "\\end{pmatrix}"
+  }
+  
+  X <-
+    apply(x, 1, function(x) {
+      paste(
+        paste(x, collapse = "&"),
+        "\\\\"
+      )
+    })
+  paste(c(begin, X, end), collapse = "")
+}
+
+# Inspired from above
+SETUP_rchar_vec_to_tex <- function(x) {
+  begin <- "\\begin{pmatrix}\\text{"
+  end <- "}\\end{pmatrix}"
+  x <- paste(x, collapse = "}\\\\\\text{")
+  paste(c(begin, x, end), collapse = "")
+}
+
+# For adding the beta
+SETUP_rchar_vec_to_beta_tex <- function(x) {
+  begin <- "\\begin{pmatrix}\\beta_{\\text{"
+  end <- "}}\\end{pmatrix}"
+  x <- paste(x, collapse = "}}\\\\\\beta_{\\text{")
+  paste(c(begin, x, end), collapse = "")
+}
+SETUP_specify_decimal <- function(x, k) trimws(format(round(x, k), nsmall = k))
+
+SETUP_INCLUDE_QUESTION_END_BOOLEAN <- FALSE  # set false before final export
+```
+
+```{r setup2, include = FALSE}
+# seems to require a different chunk by itself
+# par(mar = c(5, 5, 0, 0))  # To ensure plots do not get their labels cropped
+```
+# Question 1
+## (a) {#onea}
+Q: Let’s begin by building a logistic regression model to predict whether an individual's earnings are above $50,000 (the variable "over50k") using all of the other variables as independent variables. Split the data randomly into a training set and a testing set, setting the seed to 2000 before creating the split. Split the data so that the training set contains 60% of the observations, while the testing set contains 40% of the observations. Next, build a logistic regression model to predict the dependent variable "over50k", using all of the other variables in the dataset as independent variables. Use the training set to build the model. Identify all the variables that are significant, or have factors that are significant? (Use 0.1 as your significance threshold. You might see a warning message here - you can ignore it and proceed. This message is a warning that we might be overfitting our model to the training set.)
+
+A: 
+```{r 1_a1}
+df_1 <- read.csv("census.csv")
+# str(df_1)
+library(caTools)
+set.seed(2000)
+# 0 for less than or equal to 50k, 1 for over 50k
+df_1$over50k <- as.factor(df_1$over50k == " >50K")
+spl_1 <- sample.split(df_1$over50k, SplitRatio = 0.6)
+train_1 <- subset(df_1, spl_1 == TRUE)
+test_1 <- subset(df_1, spl_1 == FALSE)
+glm_1 <- glm(over50k ~ ., family = "binomial", data = train_1)
+```
+\pagebreak
+The follow code will print out all predictors significant at the 10% significance level.
+```{r 1_a2}
+names(which(coef(summary(glm_1))[,4] < 0.1))
+```
+
+```{r 1_a_EASY_ALIAS, include = FALSE}
+x <- names(which(coef(summary(glm_1))[,4] < 0.1))
+# for display, HTML output
+y <- gsub("occupation ","",x[startsWith(x, "occupation")])
+DISPLAY_OCCUPATION_1 <- y[1:5]
+DISPLAY_OCCUPATION_2 <- y[6:9]
+```
+We list the significant variables below:
+
+* `age`
+* `workclass`
+  * ``r gsub("workclass ","",x[startsWith(x, "workclass")])``
+* `education`
+  * ``r gsub("education ","",x[startsWith(x, "education")])``
+* `maritalstatus`
+  * ``r gsub("maritalstatus ","",x[startsWith(x, "maritalstatus")])``
+* `occupation`
+  * ``r DISPLAY_OCCUPATION_1``, ``r DISPLAY_OCCUPATION_2``
+* `relationship`
+  * ``r gsub("relationship ","",x[startsWith(x, "relationship")])``
+* `sex`
+  * ``r gsub("sex ","",x[startsWith(x, "sex")])``
+* `capitalgain`
+* `capitalloss`
+* `hoursperweek`
+
+## (b) {#oneb}
+Q: What is the accuracy of the model on the testing set? Use a threshold of 0.5. (You might see a warning message when you make predictions on the test set - you can safely ignore it.)
+
+A: 
+```{r 1_b, results = "hold"}
+pred_1_b <- predict(glm_1, newdata = test_1, type = "response")
+table_1_b <- table(test_1$over50k, pred_1_b >= 0.5)
+sum(diag(table_1_b))/sum(table_1_b)
+```
+The accuracy of the model on the testing set is `r sum(diag(table_1_b))/sum(table_1_b)`.
+
+## (c) {#onec}
+Q: What is the baseline accuracy for the testing set?
+
+A: We need to get the baseline or more common category from the base set:
+```{r 1_c}
+base_1 <- names(table(train_1$over50k)[which.max(table(train_1$over50k))])
+unname(table(test_1$over50k)[base_1]/sum(nrow(test_1)))
+```
+
+The baseline accuracy for the testing set is `r unname(table(test_1$over50k)[base_1]/sum(nrow(test_1)))`.
+
+## (d)
+Q: What is the area-under-the-curve (AUC) for this model on the test set?
+
+A: 
+```{r 1_d}
+library(ROCR)
+rocr_1_d <- prediction(pred_1_b, test_1$over50k)
+performance(rocr_1_d, "auc")@y.values
+```
+
+The AUC for this model on the test set is `r performance(rocr_1_d, "auc")@y.values`.
+
+## (e) {#onee}
+Q: We have just seen how the logistic regression model for this data achieves a high accuracy. Moreover, the significances of the variables give us a way to gauge which variables are relevant for this prediction task. However, it is not immediately clear which variables are more important than the others, especially due to the large number of factor variables in this problem. Let us now build a classification tree to predict "over50k". Use the training set to build the model, and all of the other variables as independent variables. Use the default parameters. After you are done building the model, plot the resulting tree.
+
+A: First, we load the library for building a classification tree:
+```{r 1_e1}
+library(rpart)
+library(rpart.plot)
+```
+
+Then we build the tree
+```{r 1_e2}
+tree_1_e <- rpart(over50k ~ ., data = train_1, method = "class")
+```
+
+And plot it:
+```{r 1_e3, out.extra = ifelse(SETUP_LATEX_FLAG, 'trim = {0 3cm 0 3cm}', '')}
+prp(tree_1_e)
+```
+
+## (f)
+Q:  How many splits does the tree have in total?
+```{r 1_f}
+unname(tail(tree_1_e$cptable[,2], 1))
+```
+A: There are `r unname(tail(tree_1_e$cptable[,2], 1))` splits in the tree, corresponding to the default `cp` parameter of `0.01`.
+
+## (g)
+Q: Which variable does the tree split on at the first level (the very first split of the tree)?
+
+A: We can see this in the `prp()` output above, or use the following
+```{r 1_g}
+# row name is the node index, in this case 1 for the first split
+# and first column is the variable
+tree_1_e$frame["1", 1] 
+```
+
+The tree splits on the variable ``r tree_1_e$frame["1", 1]`` at the first level.
+
+## (h)
+Q: Which variables does the tree split on at the second level (immediately after the first split of the tree)?
+
+A: 
+```{r 1_h, results = "hold"}
+# row name is the node index, in this case 1 for the first split
+# and first column is the variable
+tree_1_e$frame["2", 1]
+tree_1_e$frame["3", 1]
+```
+
+The tree splits on the variables ``r tree_1_e$frame["2", 1]`` and ``r tree_1_e$frame["3", 1]`` at the second level.
+
+## (i)
+Q: What is the accuracy of the model on the testing set? Use a threshold of 0.5.
+
+A:
+```{r 1_i}
+pred_1_i <- predict(tree_1_e, newdata = test_1, type = "class")
+table_1_i <- table(test_1$over50k, pred_1_i)
+sum(diag(table_1_i))/sum(table_1_i)
+```
+
+The accuracy of the model on the testing is `r sum(diag(table_1_i))/sum(table_1_i)`.
+
+## (j)
+Q:  Let us now consider the ROC curve and AUC for the CART model on the test set. You will need to get predicted probabilities for the observations in the test set to build the ROC curve and compute the AUC. Plot the ROC curve for the CART model you have estimated. Observe that compared to the logistic regression ROC curve, the CART ROC curve is less smooth. Which of the following explanations for this behavior is most correct?
+
+* The number of variables that the logistic regression model is based on is larger than the number of variables used by the CART model, so the ROC curve for the logistic regression model will be smoother.
+* CART models require a higher number of observations in the testing set to produce a smoother/more continuous ROC curve; there is simply not enough data.
+* The probabilities from the CART model take only a handful of values (five, one for each end bucket/leaf of the tree); the changes in the ROC curve correspond to setting the threshold to one of those values.
+* The CART model uses fewer continuous variables than the logistic regression model (`capitalgain` for CART versus `age`, `capitalgain`, `capitallosses`, `hoursperweek`), which is why the CART ROC curve is less smooth than the logistic regression one.
+
+A: We first plot the ROC curve for the logistic regression model:
+```{r 1_j1, out.extra = ifelse(SETUP_LATEX_FLAG, 'trim = {0 0.6cm 0 1.6cm}', '')}
+perf_1_j_1 <- performance(rocr_1_d, measure = "tpr", x.measure = "fpr")
+plot(perf_1_j_1)
+```
+
+Then we plot the ROC curve for the CART model:
+```{r 1_j2, out.extra = ifelse(SETUP_LATEX_FLAG, 'trim = {0 0.6cm 0 1.6cm}', '')}
+pred_1_j <- predict(tree_1_e, newdata = test_1, type = "prob")
+rocr_1_j <- prediction(pred_1_j[,2], test_1$over50k)
+perf_1_j_2 <- performance(rocr_1_j, measure = "tpr", x.measure = "fpr")
+plot(perf_1_j_2)
+```
+
+The plots indicate that the ROC curve for logistic regression is more smooth. By tabulating the probability results (as opposed to majority votes) from the CART model, we can see that there are only 5 possible predicted probability values. Since they can only take on these handful of values, the breakpoints of the curve correspond to the true positive rate and false positive rate when the threshold is set to these values. Option 3 is correct.
+
+## (k)
+Q: What is the AUC of the CART model on the test set?
+
+A: 
+```{r 1_k}
+performance(rocr_1_j, measure = "auc")@y.values
+```
+
+The AUC of the CART model on the test set is `r performance(rocr_1_j, measure = "auc")@y.values`.
+
+## (l)
+Q: Before building a random forest model, we will down-sample our training set. While some modern personal computers can build a random forest model on the entire training set, others might run out of memory when trying to train the model since random forests is much more computationally intensive than CART or Logistic Regression. For this reason, before continuing we will define a new training set to be used when building our random forest model, that contains 2000 randomly selected observations from the original training set. Do this by running the following commands in your R console (assuming your training set is called "train"):
+
+`> set.seed(1)`\linebreak
+`> trainSmall <- train[sample(nrow(train), 2000), ]`
+
+Let us now build a random forest model to predict “over50k”, using the dataset "trainSmall" to build the model. Set the seed to 1 again right before building the model, and use all of the other variables in the dataset as independent variables. (If you get an error that random forest "can not handle categorical predictors with more than 32 categories", rebuild the model without the `nativecountry` variable as one of the independent variables.) Then, make predictions using this model on the entire test set. What is the accuracy of the model on the test set, using a threshold of 0.5? (Remember that you don’t need a "type" argument when making predictions with a random forest model if you want to use a threshold of 0.5. Also, note that your accuracy might be different from since the random forest models can still differ depending on your operating system, even when the random seed is set.)
+
+A: Subsetting,
+```{r 1_l1}
+set.seed(1)
+trainSmall <- train_1[sample(nrow(train_1), 2000),]
+```
+
+Then running the random forest algorithm,
+```{r 1_l2}
+library(randomForest)
+set.seed(1)
+rf_1 <- randomForest(over50k ~ ., data = trainSmall)
+pred_1_l <- predict(rf_1, newdata = test_1)
+table_1_l <- table(test_1$over50k, pred_1_l)
+sum(diag(table_1_l))/sum(table_1_l)
+```
+
+\needspace{6\baselineskip}
+## (m)
+Q: As we discussed in class, random forest models work by building a large collection of trees. As a result, we lose some of the interpretability that comes with CART in terms of seeing how predictions are made and which variables are important. However, we can still compute metrics that give us insight into which variables are important. One metric that we can look at is the number of times, aggregated over all of the trees in the random forest model, that a certain variable is selected for a split. To view this metric, run the following lines of R code (replace “MODEL” with the name of your random forest model):
+
+
+`> vu <- varUsed(MODEL, count=TRUE)`\linebreak
+`> vusorted <- sort(vu, decreasing = FALSE, index.return = TRUE)`\linebreak
+`> dotchart(vusorted$x, names(MODEL$forest$xlevels[vusorted$ix]))`
+
+
+This code produces a chart that for each variable measures the number of times that variable was selected for splitting (the value on the x-axis). Which of the variables is the most important in terms of the number of splits?
+
+A:
+```{r 1_m1, out.extra = ifelse(SETUP_LATEX_FLAG, 'trim = {0 1cm 0 2.2cm}', '')}
+vu <- varUsed(rf_1, count = TRUE)
+vusorted <- sort(vu, decreasing = FALSE, index.return = TRUE)
+dotchart(vusorted$x, names(rf_1$forest$xlevel[vusorted$ix]))
+```
+
+We can get the most frequent variable by calling `tail()` on the last `names()` object:
+```{r 1_m2}
+tail(names(rf_1$forest$xlevel[vusorted$ix]), 1)
+```
+
+The variable that is the most important in terms of the number of splits is ``r tail(names(rf_1$forest$xlevel[vusorted$ix]), 1)``.
+
+\needspace{6\baselineskip}
+## (n)
+Q: A different metric we can look at is related to “impurity”, which measures how homogeneous each bucket or leaf of the tree is. In each tree in the forest, whenever we select a variable and perform a split, the impurity is decreased. Therefore, one way to measure the importance of a variable is to average the reduction in impurity, taken over all the times that variable is selected for splitting in all of the trees in the forest. To compute this metric, run the following command in R (replace ”MODEL” with the name of your random forest model):
+
+`> varImpPlot(MODEL)`
+
+Which of the following variables is the most important in terms of mean reduction in impurity?
+
+A: We can plot as directed by the question,
+```{r 1_n1, out.extra = ifelse(SETUP_LATEX_FLAG, 'trim = {0 0.4cm 0 0.6cm}', '')}
+varImpPlot(rf_1)
+```
+
+or grab it directly from the object:
+```{r 1_n2}
+rownames(rf_1$importance)[which.max(rf_1$importance)]
+```
+
+The variable ``r rownames(rf_1$importance)[which.max(rf_1$importance)]`` is the most important in terms of mean reduction in impurity.
+
+## (o)
+Q: We now conclude our study of this dataset by looking at how CART behaves with different choices of its parameters. Let us select the cost complexity parameter for our CART model using k-fold cross validation, with k = 10 folds. Modify the minimum complexity parameter cp = 0.0001. Suggest a reasonable value of the cost complexity parameter from the plot and plot the corresponding tree.
+
+A: We run CART with specified `cp` parameter below: 
+```{r 1_o1}
+tree_1_o_1 <- rpart(over50k ~., data = train_1, cp = 0.0001)
+printcp(tree_1_o_1)  # uncomment but output is fairly big and uninformative
+plotcp(tree_1_o_1)
+```
+
+\needspace{4\baselineskip}
+If we were to strictly follow the minimum cross-validation error, we could run the following:
+```{r 1_o2}
+tree_1_o_1$cptable[which.min(tree_1_o_1$cptable[,4]),]
+```
+which suggests to prune to the `cp` parameter of `r format(tree_1_o_1$cptable[which.min(tree_1_o_1$cptable[,4]), 1], nsmall = 8)`.
+
+However, looking at the table, we can see that many of the splits result in an `xerror` of around 0.61, 0.60 and 0.59. Any value which results in a similar cross-validation error would work. We aim for the smallest tree with around `xerror` of 0.61, the first of which has `cp` value `0.00422352`.
+
+```{r 1_o3}
+tree_1_o_2 <- prune(tree_1_o_1, cp = 0.00422352)
+prp(tree_1_o_2)
+```
+
+\needspace{6\baselineskip}
+## (p)
+Q: What is the prediction accuracy on the test set? Comment on how the model compares with the model in part [(e)](#onee).
+
+A: 
+
+```{r 1_p}
+pred_1_p <- predict(tree_1_o_2, newdata = test_1, type = "class")
+table_1_p <- table(test_1$over50k, pred_1_p)
+table_1_p
+sum(diag(table_1_p))/sum(table_1_p)
+```
+
+The accuracy on the test set is `r sum(diag(table_1_p))/sum(table_1_p)`.
+
+The accuracy on the test set is greater but the model is much more complicated and less interpretable. 
+
+```{r 1_end, include = SETUP_INCLUDE_QUESTION_END_BOOLEAN}
+setdiff(ls(), ls(pattern = "SETUP"))
+rm(list = setdiff(ls(), ls(pattern = "SETUP")))
+```
+\pagebreak
+
+# Question 2
+## (a) {#twoa}
+Q: Use a seed of 1. Split the dataset into a training set and a test set using the sample function where half the observations lie in each set. Fit a regression tree to the training set. Plot the tree. How many predictor variables were used in the regression tree?
+
+A: Splitting the dataset,
+```{r 2_a1}
+df_2 <- read.csv("Boston.csv")
+set.seed(1)
+trainid_2 <- sample(1:nrow(df_2), nrow(df_2)/2)
+train_2 <- df_2[trainid_2,]
+test_2 <- df_2[-trainid_2,]
+```
+
+Running the CART model and plotting,
+
+```{r 2_a2, out.extra = ifelse(SETUP_LATEX_FLAG, 'trim = {0 1.6cm 0 1.6cm}', '')}
+library(rpart)
+library(rpart.plot)
+tree_2_a <- rpart(medv ~ ., data = train_2)
+# summary(tree_2_a)
+# tree_2_a
+prp(tree_2_a)
+```
+
+```{r 2_a_EASY_ALIAS, include = FALSE}
+x <- as.character(unique(tree_2_a$frame[,1]))
+x <- x[!x %in% "<leaf>"]
+SPLIT_VARS_2_A <- paste0("`" , x[-length(x)], "`", collapse = ", ")
+```
+
+The variables used to split are `r SPLIT_VARS_2_A` and ``r tail(x, 1)``.
+
+## (b) {#twob}
+Q:  What is the test set mean squared error? Draw a scatter plot of the fitted and true values. On average, the test predictions are within what range of the true median home value for the suburb?
+
+A: Calculating the mean squared error,
+```{r 2_b1}
+pred_2 <- predict(tree_2_a, newdata = test_2)
+mse_2_b <- mean((pred_2 - test_2$medv)^2)
+mse_2_b
+```
+
+Scatter plotting and calculating, on average, how far the predictions are from the median true home value,
+```{r 2_b2, results = "hold", out.extra = ifelse(SETUP_LATEX_FLAG, 'trim = {0 1.6cm 0 1.6cm}', '')}
+plot(pred_2, test_2$medv)
+abline(1:50, 1:50)
+sqrt(mse_2_b)
+```
+
+Test MSE from the regression tree is `r mse_2_b`. On average, the predictions are within `r sqrt(mse_2_b)` of the true value.
+
+## (c)
+Q:  Use the default settings and cross-validation in order to determine the optimal level of tree complexity. Would you prune the tree based on the result?
+
+We could prune the tree as the number of splits which result in lowest `xerror` is given by a larger `cp` parameter. However, the differences are minimal, although a smaller tree is preferable to a larger tree. We decide to not prune the tree.
+
+## (d)
+Q: Suppose you prune the tree to 5 nodes. Plot the new tree. What is the test set mean squared error? Compare with the result in part [(b)](#twob).
+
+A: 5 nodes implies 4 splits. We hence need to get the corresponding `cp` value:
+
+```{r 2_d1}
+cp_val_2 <- tree_2_a$cptable[tree_2_a$cptable[,2] == 4, 1]
+```
+
+```{r 2_d2}
+tree_2_d <- prune(tree_2_a, cp = cp_val_2)
+pred_2_d <- predict(tree_2_d, newdata = test_2)
+mse_2_d <- mean((pred_2_d - test_2$medv)^2)
+mse_2_d
+```
+
+The test set mean squared error is now `r mse_2_d`. This test error is `r ifelse(mse_2_b<mse_2_d, "higher", "lower")` than that in [(b)](#twob).
+
+\needspace{16\baselineskip}
+## (e)
+Q: Use random forests to analyze this data. Set the seed to 1 before running the method. What test set mean squared error do you obtain? How does this compare to the CART model? How many variables does the `randomForest` function try at each split?
+
+A: 
+```{r 2_e}
+library(randomForest)
+set.seed(1)
+rf_2 <- randomForest(medv ~ ., data = train_2)
+# rf_2
+pred_2_e <- predict(rf_2, newdata = test_2)
+mse_2_e <- mean((pred_2_e - test_2$medv)^2)
+mse_2_e
+```
+
+The test MSE is `r mse_2_e`. The result from the random forest, in terms of test error, is significantly smaller than CART. It tries `r rf_2$mtry` variables at each split by default.
+
+## (f)
+Q: Use the `importance()` function to determine the two variables which are most important. Plot the importance measures using the `varImpPlot()`.
+
+A: We can get the two most important variables, but we need to wrangle with the importance object a little:
+```{r 2_f1}
+import_2 <- as.vector(importance(rf_2))
+names(import_2) <- rownames(importance((rf_2)))
+names(sort(import_2, decreasing = TRUE)[1:2])
+```
+
+\needspace{8\baselineskip}
+Then plotting it,
+```{r 2_f2, out.extra = ifelse(SETUP_LATEX_FLAG, 'trim = {0 0.5cm 0 0.8cm}', '')}
+varImpPlot(rf_2)
+```
+
+The two most important variables are ``r names(sort(import_2, decreasing = TRUE)[1])`` and ``r names(sort(import_2, decreasing = TRUE)[2])``.
+
+## (g)
+Q: Describe the effect of the number of variables considered at each split controlled by the `mtry` argument in `randomForest()`, on the error obtained.
+
+A: We can try out different values of `mtry` arguments in random forests to control this. Using all variables gives highly correlated trees, and as such, the prediction power of such a model would not be as good.
+
+```{r 2_end, include = SETUP_INCLUDE_QUESTION_END_BOOLEAN}
+setdiff(ls(), ls(pattern = "SETUP"))
+rm(list = setdiff(ls(), ls(pattern = "SETUP")))
+```
+\pagebreak
+
+# Question 3
+## (a)
+Q: Read the data into the dataframe `supreme`. What is the fraction of cases in which the Supreme Court reversed the decision of the Lower Court?
+
+A: Reading into the dataframe,
+```{r 3_a1}
+supreme <- read.csv("supremeexercise.csv")
+```
+
+The fraction of cases in which the Supreme Court reversed the decision can be directly calculated using a table,
+```{r 3_a2}
+table_3_a <- table(supreme$lctdir,supreme$result)
+(table_3_a["conser", "0"] + table_3_a["liberal", "1"]) / sum(table_3_a)
+```
+
+The fraction of cases in which the Supreme Court reversed the decision of the Lower Court is `r (table_3_a["conser", "0"] + table_3_a["liberal", "1"]) / sum(table_3_a)`.
+
+## (b)
+Q: Define a new variable `unCons` that takes a value of 1 if the decision made by the judges was an unanimous conservative decision and 0 otherwise. Write down the R command(s) that you used to define this variable. What is the total number of cases that had a unanimous conservative decision?
+
+A:
+```{r 3_b, results = "hold"}
+supreme$unCons <- as.integer(rowSums(supreme[,5:13]) == 9)
+# 5:13 are the judgments
+table(supreme$unCons)
+```
+
+`r table(supreme$unCons)["1"]` cases had a unanimous conservative decision.
+
+## (c)
+Q: Define a new variable `unLib` that takes a value of 1 if the decision made by the judges was an unanimous liberal decision and 0 otherwise. What is the total number of cases that had an unanimous liberal decision?
+
+A: 
+```{r 3_c}
+supreme$unLib <- as.integer(rowSums(supreme[,5:13]) == 0)
+table(supreme$unLib)
+```
+`r table(supreme$unLib)["1"]` cases had a unanimous liberal decision.
+
+## (d) {#threed}
+Q:  You will now develop a two step CART model for this data. In the first step, you will build two classification trees to predict the unanimous conservative and liberal decisions respectively and in the second step, you will build nine judge-specific trees to predict the outcome for cases for which the predictions from the first step are ambiguous. Start by building a CART model to predict `unCons` using the six predictor variables `petit`, `respon`, `circuit`, `unconst`, `lctdir` and `issue`. Use the `rpart` package in R to build the model. Use the default parameter settings to build the CART model. Remember that you want to build a classification tree rather than a regression tree. Use all the observations to build the model. How many node splits are there in the resulting tree?
+
+A:
+```{r 3_d, out.extra = ifelse(SETUP_LATEX_FLAG, 'trim = {0 1.6cm 0 1.6cm}', '')}
+library(rpart)
+library(rpart.plot)
+tree_3_d <- rpart((as.factor(unCons)~petit + respon + 
+                   circuit + unconst + lctdir + issue),
+                  data = supreme)
+# prp(tree_3_d)
+unname(tail(tree_3_d$cptable[,2], 1))
+```
+
+There are `r tail(tree_3_d$cptable[,2], 1)` node splits in the resulting tree.
+
+## (e)
+Q: List all the variables that this tree splits on.
+
+A: 
+```{r 3_e}
+spl_vars_3 <- as.character(unique(tree_3_d$frame[,1]))
+spl_vars_3 <- spl_vars_3[!spl_vars_3 %in% "<leaf>"]
+```
+
+```{r 3_e_EASY_ALIAS, include = FALSE}
+SPLIT_VARS_3_E <- paste0("`" , spl_vars_3[-length(spl_vars_3)], "`", collapse = ", ")
+```
+The tree in [(d)](#threed) splits on `r SPLIT_VARS_3_E` and ``r tail(spl_vars_3, 1)``.
+
+\needspace{12\baselineskip}
+## (f)
+Q: What is the area under the curve for the receiver operating characteristic (ROC) curve for this model?
+
+A:
+```{r 3_f}
+library(ROCR)
+pred_3_f <- predict(tree_3_d, newdata = supreme)
+rocr_3_f <- prediction(pred_3_f[,2],supreme$unCons)
+performance(rocr_3_f,"auc")@y.values
+```
+The AUC is given as `r performance(rocr_3_f,"auc")@y.values`.
+
+## (g) {#threeg}
+Q: Similarly build a CART model to predict `unLib` using the six variables `petit`, `respon`, `circuit`, `unconst`, `lctdir` and `issue` as the predictor variables. Use the default parameter settings to build the CART model. Use all the observations to build the model. Which variable does the tree split on at the first level?
+
+A: 
+```{r 3_g1}
+tree_3_g <- rpart(as.factor(unLib)~petit+respon + circuit +
+                unconst + lctdir + issue, 
+                data = supreme)
+# prp(tree_3_g)
+```
+
+\needspace{6\baselineskip}
+We can find what variable the tree splits on the first level directly:
+```{r 3_g2, results = "hold"}
+tree_3_g$frame["1", 1]  # the string gets the row name
+# referencing the row name directly is important when
+# one wants to reference specific nodes directly e.g. "23"
+```
+
+The tree splits on ``r tree_3_g$frame["1", 1]`` at the first level.
+
+## (h)
+Q: Using the CART tree plot for the model in question [(g)](#threeg), identify the leaf node with the fewest number of observations in it. What is the fraction of cases that has an unanimous liberal decision at this node?
+
+\needspace{4\baselineskip}
+A: To get the details of the node with the least number of observations, we can use the following:
+```{r 3_h1}
+tree_3_g$frame[which.min(tree_3_g$frame[,2]),]
+```
+
+What we are looking is located within the `frame` object, to access them directly we will be hardcoding in their positions with respect to the current version of `rpart` (`rpart_4.1-15`):
+```{r 3_h2}
+tree_3_g$frame[which.min(tree_3_g$frame[,2]),][[9]][3]/min(tree_3_g$frame[,2])
+```
+```{r 3_h_EASY_ALIAS, include = FALSE}
+NUMERATOR_3_H <- tree_3_g$frame[which.min(tree_3_g$frame[,2]),][[9]][3]
+DENOMINATOR_3_H <- min(tree_3_g$frame[,2])
+```
+
+
+The fraction of cases with unanimous liberal decisions at this node is $\frac{`r NUMERATOR_3_H`}{`r DENOMINATOR_3_H`}=`r NUMERATOR_3_H/DENOMINATOR_3_H`$.
+
+## (i) {#threei}
+Q: We will now combine the results from the two trees. What is the total number of cases where the two trees predict an unanimous outcome for the conservative and liberal judgement simultaneously, thus contradicting each other?
+
+\needspace{6\baselineskip}
+A: Predicting first, then getting the number of cases,
+```{r 3_i}
+pred_3_i1 <- predict(tree_3_d, newdata = supreme, type = "class")
+pred_3_i2 <- predict(tree_3_g, newdata = supreme, type = "class")
+table(pred_3_i1, pred_3_i2) ["1", "1"]
+```
+
+The total number of cases where the two trees predict a unanimous outcome for the conservative and liberal judgment simultaneously is `r table(pred_3_i1, pred_3_i2) ["1", "1"]`.
+
+## (j) {#threej}
+Q: What is the total number of cases where neither tree predicts an unanimous outcome?
+
+A: 
+```{r 3_j}
+table(pred_3_i1, pred_3_i2) ["0", "0"]
+```
+The total number of cases where neither tree predicts an unanimous outcome is `r table(pred_3_i1, pred_3_i2) ["0", "0"]`.
+
+## (k)
+Q: We now build the second part of our model which is nine judge-specific classification trees to provide predictions for the cases when either both trees predict an unanimous outcome or neither does (the harder cases). Build a CART model to predict each of the variables `rehndir` up to `brydir` using the six predictor variables `petit`, `respon`, `circuit`, `unconst`, `lctdir` and `issue`. Build you model using only those cases identified in questions [(i)](#threei) and [(j)](#threej). Use the majority of the judge predictions to make a prediction for each of these cases. 
+
+What is the accuracy of the model on these cases?
+
+\needspace{8\baselineskip}
+A:
+```{r 3_k}
+judges_3 <- colnames(supreme)[5:13]
+df_3_k <- subset(supreme, pred_3_i1 == pred_3_i2)
+# conservative decisiosn
+total_cons_3 <- integer(nrow(df_3_k))  # initialise as vector of 0s
+for (judge in judges_3) {
+  formula_i <- as.formula(paste0("as.factor(", judge, ")",
+                                 "~ petit + respon + ",
+                                 "circuit + unconst + ",
+                                 "lctdir+issue"))
+  tree_i <- rpart(formula_i, data = df_3_k)
+  pred_i <- predict(tree_i, newdata = df_3_k,
+                    type = "class")
+  total_cons_3 <- total_cons_3 + as.numeric(levels(pred_i))[as.integer(pred_i)]
+}
+table_3_k <- table(total_cons_3 >= 5, df_3_k$result)
+sum(diag(table_3_k))/nrow(df_3_k)
+```
+
+The accuracy of the model on these cases is `r sum(diag(table(total_cons_3 >= 5, df_3_k$result)))/nrow(df_3_k)`
+
+## (l)
+Q: What is the overall accuracy of your two step CART model?
+
+A: We get the accuracy of step 1 of the process first, using the tree from [(d)](#threed) as when the value of the prediction is 1 and the value as denoted in the original data is 1, the prediction is correct. (while for the tree in [(g)](#threeg), a predicted value of 1 should correspond to a value of 0 in the original data.)
+```{r 3_l1}
+df_3_l <- subset(supreme, pred_3_i1 != pred_3_i2)
+pred_3_l <- predict(tree_3_d, newdata = df_3_l, type = "class")
+table_3_l <- table(pred_3_l, df_3_l$result)
+sum(diag(table_3_l))
+```
+A total of `r sum(diag(table(pred_3_l, df_3_l$result)))` cases were predicted correctly in the first step of the model.
+
+\needspace{6\baselineskip}
+We can then calculate the overall accuracy:
+```{r 3_l2}
+sum(diag(table_3_k + table_3_l)) / nrow(supreme)
+```
+The overall accuracy of the two step CART model is `r sum(diag(table_3_k + table_3_l)) / nrow(supreme)`.
+
+## (m)
+Q: We consider the Moseley versus Victoria Secret Catalogue case in 2002, the details of which are as follows: The owner of the "Victoria’s Secret" **business** brought a trademark dilution action against Victor Moseley in the Lower Court. They claimed that the "Victoria's Secret" trademark was diluted and tarnished by Moseley’s adult specialty business named "Victor’s Secret". The U.S. Lower Court for the **Sixth Circuit** ruled the judgment in a **conservative** direction by ruling in favor of Victoria’s Secret. Moseley petitioned against this decision to the Supreme Court. Use your two step model to predict the outcome of this case which deals with **economic activities**. You can look at the tree plots to make your conclusion.
+
+A: 
+```{r 3_m}
+# one way to verify this is to check visually with the trees
+# prp(tree_3_d)
+# prp(tree_3_g)
+
+# alternatively we will code in the new data and predict with our trees
+data_3_m <- data.frame(petit = "BUSINESS", respon = "BUSINESS",
+                       circuit = "6th", unconst = 0,
+                       lctdir = "conser", issue = "ECN")
+predict(tree_3_d, newdata = data_3_m, type = "class")
+predict(tree_3_g, newdata = data_3_m, type = "class")
+```
+
+As can be seen, both of the trees in the first step of the process agree in that there will be no unanimous conservative decision but there would be a unanimous liberal decision. Hence, the prediction is that there would be a liberal decision.
+
+## (n)
+Q: We will now build a random forest model directly to predict the outcome result using the six predictor variables `petit`, `respon`, `circuit`, `unconst`, `lctdir` and `issue`. Use all the observations to build you model. Use the default settings to build the random forest model. What is the accuracy of the model?
+
+\needspace{4\baselineskip}
+A:
+```{r 3_n}
+library(randomForest)
+set.seed(1)
+rf_3 <- randomForest(as.factor(result)~issue + circuit + lctdir +
+                     unconst + petit + respon, 
+                     data = supreme)
+pred_3_n <- predict(rf_3, newdata = supreme)
+sum(diag(table(pred_3_n, supreme$result)))/nrow(supreme)
+```
+
+The accuracy of the model is `r sum(diag(table(pred_3_n,supreme$result)))/nrow(supreme)`.
+
+## (o)
+Q: The CART model and the random forest models have their respective advantages. Briefly provide one reason each as to why the CART model might be preferred to the random forest model and one reason why the random forest model might be preferred to the CART model.
+
+A: CART is more interpretable than the random forest, but the latter has a greater accuracy.
+
+```{r 3_end, include = SETUP_INCLUDE_QUESTION_END_BOOLEAN}
+setdiff(ls(), ls(pattern = "SETUP"))
+rm(list = setdiff(ls(), ls(pattern = "SETUP")))
+```
+
