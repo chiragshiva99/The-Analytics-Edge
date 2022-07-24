@@ -1,0 +1,467 @@
+---
+title: "Week 10 Exercise Solutions"
+output:
+  pdf_document:
+    template: footmiscbeforehyperref.tex # footmisc, and spacing adjustments
+    fig_caption: true
+    highlight: tango
+  html_document: 
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    highlight: tango
+geometry: margin=1in
+fontsize: 12pt
+linkcolor: blue
+header-includes:
+  - \usepackage{mathtools}  # for pmatrix*
+  - \usepackage[sfdefault]{FiraSans}  # any font would work
+  - \usepackage[T1]{fontenc}
+  - \renewcommand*\oldstylenums[1]{{\firaoldstyle \#1}}
+  - \usepackage{needspace}  # for nice page spaces
+  - \setlength\footnotemargin{0.4em}  # not inside template
+  - \newcommand{\specialcell}[2][c]{\begin{tabular}[#1]{@{}c@{}}#2\end{tabular}}  # to multiline text in tabular
+  - \usepackage{sectsty} \sectionfont{\centering\LARGE}\subsectionfont{\large}  # to change header fonts in PDF
+  - \usepackage{hyperref}  # load after everything else
+editor_options: 
+  chunk_output_type: inline
+---
+
+<style type="text/css">
+h1 {
+  text-align: center;
+}
+h2 {
+  font-size: 24px
+}
+h3 {
+  font-size: 20px
+}
+</style>
+
+```{r setup1, include=FALSE}
+SETUP_start_time <- Sys.time()  # to measure knitting time
+
+knitr::opts_knit$set(global.par = TRUE)
+knitr::opts_chunk$set(echo = TRUE)
+SETUP_LATEX_FLAG <- knitr::is_latex_output()  # to differentiate HTML/PDF output
+
+# From write_matex2 by https://stackoverflow.com/a/54088015
+SETUP_rmat_to_tex <- function(x, IS_LATEX=SETUP_LATEX_FLAG) {
+  if (IS_LATEX) {
+    begin <- "\\begin{pmatrix*}[r]"
+    end <- "\\end{pmatrix*}"
+  } else {
+    begin <- "\\begin{pmatrix}"  # there is no MathTools in MathJax
+    end <- "\\end{pmatrix}"
+  }
+  
+  X <-
+    apply(x, 1, function(x) {
+      paste(
+        paste(x, collapse = "&"),
+        "\\\\"
+      )
+    })
+  paste(c(begin, X, end), collapse = "")
+}
+
+# Inspired from above
+SETUP_rchar_vec_to_tex <- function(x) {
+  begin <- "\\begin{pmatrix}\\text{"
+  end <- "}\\end{pmatrix}"
+  x <- paste(x, collapse = "}\\\\\\text{")
+  paste(c(begin, x, end), collapse = "")
+}
+
+# For adding the beta
+SETUP_rchar_vec_to_beta_tex <- function(x) {
+  begin <- "\\begin{pmatrix}\\beta_{\\text{"
+  end <- "}}\\end{pmatrix}"
+  x <- paste(x, collapse = "}}\\\\\\beta_{\\text{")
+  paste(c(begin, x, end), collapse = "")
+}
+SETUP_specify_decimal <- function(x, k) trimws(format(round(x, k), nsmall = k))
+
+SETUP_INCLUDE_QUESTION_END_BOOLEAN <- FALSE  # set false before final export
+```
+
+# Question 1
+## (a)
+Q: Begin by loading the dataset **emails.csv** into a data frame called **emails**. Remember to pass the `stringsAsFactors=FALSE` option when loading the data. How many emails are in the dataset? How many of the emails are spam?
+
+A: 
+```{r 1_a}
+emails <- read.csv("emails.csv", stringsAsFactors = FALSE)
+nrow(emails)
+table(emails$spam)["1"]
+```
+
+There are `r nrow(emails)` emails in the dataset. `r table(emails$spam)["1"]` of these emails are spam.
+
+## (b)
+Q: Which word appears at the beginning of every email in the dataset?
+
+A: 
+The word is `Subject`. It is also possible to computationally check that the longest common starting substring of the `emails$text` vector is `"Subject: "`.
+
+## (c)
+Q: Could a spam classifier potentially benefit from including the frequency of the word that
+appears in every email?
+
+i. No - the word appears in every email so this variable would not help us differentiate spam from ham.
+ii. Yes - the number of times the word appears might help us differentiate spam from ham.
+
+A:  Yes - since the number of times a word appears might be different in spam and ham email messages. For example, a long email might have the word "subject" occur more often, and this might be indicative of ham emails.
+
+## (d)
+Q: The `nchar()` function counts the number of characters in a piece of text. How many characters are in the longest email in the dataset (where longest is measured in terms of the maximum number of characters)?
+
+A: 
+```{r 1_d}
+max(nchar(emails$text))
+```
+The longest email message has `r max(nchar(emails$text))` characters.
+
+## (e)
+Q: Which row contains the shortest email in the dataset? (Just like in the previous problem, shortest is measured in terms of the fewest number of characters). Write down the corresponding email.
+
+A: 
+```{r 1_e}
+which.min(nchar(emails$text))
+emails$text[which.min(nchar(emails$text))]
+```
+
+The row `r which.min(nchar(emails$text))` contains the shortest email in the dataset. The corresponding email is "`r emails$text[which.min(nchar(emails$text))]`", not including the double quotes used to delineate the start and end of the string.
+
+\needspace{12\baselineskip}
+## (f)
+Q: Follow the standard steps to build and pre-process the corpus:
+
+  * Load the tm package.
+  * Build a new corpus variable called `corpus`.
+  * Using `tm_map`, convert the text to lowercase.
+  * Using `tm_map`, remove all punctuation from the corpus.
+  * Using `tm_map`, remove all English stopwords from the corpus.
+  * Using `tm_map`, stem the words in the corpus.
+  * Build a document term matrix from the corpus, called `dtm`
+
+A: We build the `corpus` variable, with warnings suppressed:
+```{r 1_f1, message = FALSE, warning = FALSE}
+library(tm)
+corpus <- Corpus(VectorSource(emails$text))
+corpus <- tm_map(corpus, content_transformer(tolower))  
+corpus <- tm_map(corpus, removePunctuation)
+corpus <- tm_map(corpus, removeWords, stopwords("english"))
+corpus <- tm_map(corpus, stemDocument)
+dtm <- DocumentTermMatrix(corpus)
+```
+
+We can count the number of terms with `ncol()`:
+```{r 1_f2}
+ncol(dtm)
+```
+
+There are `r ncol(dtm)` terms in the document term matrix.
+
+## (g)
+Q: To obtain a more reasonable number of terms, limit `dtm` to contain terms appearing in at least 5% of documents, and store this result as `spdtm` (don't overwrite `dtm`, because we will use it later). How many terms are in `spdtm`?
+
+A: 
+```{r 1_g}
+spdtm <- removeSparseTerms(dtm, 0.95)
+ncol(spdtm)
+```
+
+There are `r ncol(spdtm)` terms in `spdtm`.
+
+## (h)
+Q:  Build a data frame called `emailsSparse` from `spdtm`, and use the `make.names()` function to make the variable names of emailsSparse valid. `colSums()` is an R function that returns the sum of values for each variable in our data frame. Our data frame contains the number of times each word stem (columns) appeared in each email (rows). Therefore, `colSums(emailsSparse)` returns the number of times a word stem appeared across all the emails in the dataset. What is the word stem that shows up most frequently across all the emails in the dataset?
+
+\needspace{6\baselineskip}
+A: 
+```{r 1_h}
+emailsSparse <- as.data.frame(as.matrix(spdtm))
+colnames(emailsSparse) <- make.names(colnames(emailsSparse))
+names(which.max(colSums(emailsSparse)))
+```
+
+The word stem that shows up most frequently across all the emails in the dataset is ``r names(which.max(colSums(emailsSparse)))``.
+
+## (i)
+Q: Add a variable called `spam` to `emailsSparse` containing the email spam labels. How many word stems appear at least 5000 times in the ham emails in the dataset? Which word stems are these?
+
+A: 
+```{r 1_i}
+emailsSparse$spam <- emails$spam
+length(names(which(colSums(subset(emailsSparse,
+                                  emailsSparse$spam == 0)) >= 5000)))
+names(which(colSums(subset(emailsSparse, emailsSparse$spam == 0)) >= 5000))
+```
+
+```{r 1_i_EASY_ALIAS, include = FALSE}
+x <- names(which(colSums(subset(emailsSparse, emailsSparse$spam == 0)) >= 5000))
+STEMS_1_I <- paste0("`" , x[-length(x)], "`", collapse = ", ")
+```
+
+There are `r length(names(which(colSums(subset(emailsSparse, emailsSparse$spam == 0)) >= 5000)))` word stems that appear at least 5000 times in the ham emails. The word stems are `r STEMS_1_I` and ``r tail(x, 1)``.
+
+
+## (j)
+Q: How many word stems appear at least 1000 times in the spam emails in the dataset? Which word stems are these?
+
+\needspace{10\baselineskip}
+A:
+```{r 1_j}
+length(names(which(colSums(subset(emailsSparse,
+                                  emailsSparse$spam == 1)) >= 1000)))
+names(which(colSums(subset(emailsSparse, emailsSparse$spam == 1)) >= 1000))
+```
+
+```{r 1_j_EASY_ALIAS, include = FALSE}
+x <- names(which(colSums(subset(emailsSparse, emailsSparse$spam == 1)) >= 1000))
+STEMS_1_J <- paste0("`" , x[-length(x)], "`", collapse = ", ")
+```
+
+There are `r length(names(which(colSums(subset(emailsSparse, emailsSparse$spam == 1)) >= 1000)))` word stems that appear at least 1000 times in the spam emails. The word stems are `r STEMS_1_J` and ``r tail(x, 1)``.
+
+## (k)
+Q: The lists of most common words are significantly different between the spam and ham emails. What does this likely imply?
+
+  i. The frequencies of these most common words are unlikely to help differentiate between spam and ham.
+  ii. The frequencies of these most common words are likely to help differentiate between spam and ham.
+
+A:  The frequencies of these most common words are likely to help differentiate between spam and ham. For example, "enron" appears very often in ham as compared to spam.
+
+## (l)
+Q: Several of the most common word stems from the ham documents, such as "enron", "hou" (short for Houston), "vinc" (the word stem of "Vince") and "kaminski", are likely specific to Vincent Kaminski’s inbox. What does this mean about the applicability of the text analytics models we will train for the spam filtering problem?
+
+\needspace{12\baselineskip}
+  i. The models we build are still very general, and are likely to perform well as a spam filter for nearly any other person.
+  ii. The models we build are personalized, and would need to be further tested before being used as a spam filter for another person.
+
+A: The models we build are personalised and would need to be further tested before being used as a spam filter for another person.
+
+## (m)
+Q: First, convert the dependent variable to a factor with
+
+`> emailsSparse$spam <- as.factor(emailsSparse$spam)`
+
+Next, set the random seed to `123` and use the `sample.split` function to split `emailsSparse` 70-30 into a training set called `train` and a testing set called `test`. Make sure to perform this step on `emailsSparse` instead of `emails`. Using the training set, train the following three models. The models should predict the dependent variable `spam`, using all other available variables as independent variables. Please be patient, as these models may take a few minutes to train.
+
+  * A logistic regression model called `spamLog`. You may see a warning message here - we'll discuss this more later.
+  * A CART model called `spamCART`, using the default parameters to train the model. Directly before training the CART model, set the random seed to `123`.
+  * A random forest model called `spamRF`, using the default parameters to train the model. Directly before training the random forest model, set the random seed to `123` (even though we've already done this earlier in the problem, it's important to set the seed right before training the model so we all obtain the same results. Keep in mind though that on certain operating systems, your results might still be slightly different).
+
+For each model, obtain the predicted spam probabilities for the training set. You may have noticed that training the logistic regression model yielded the messages "algorithm did not converge" and "fitted probabilities numerically 0 or 1 occurred". Both of these messages often indicate overfitting and in some case corresponds to severe overfitting, often to the point that the training set observations are fit perfectly by the model. Let's investigate the predicted probabilities from the logistic regression model.
+
+How many of the training set predicted probabilities from `spamLog` are less than 0.0001? How many of the training set predicted probabilities from `spamLog` are more than 0.9999? How many of the training set predicted probabilities from `spamLog` are between 0.0001 and 0.9999?
+
+\needspace{10\baselineskip}
+A: We begin by training the three models as indicated,
+```{r 1_m1, message = FALSE}
+emailsSparse$spam <- as.factor(emailsSparse$spam)
+library(caTools)
+set.seed(123)
+spl <- sample.split(emailsSparse$spam, 0.7)
+train <- subset(emailsSparse, spl == TRUE)
+test <- subset(emailsSparse, spl == FALSE)
+spamLog <- glm(spam ~ ., data = train, family = "binomial")
+library(rpart)
+set.seed(123)
+spamCART <- rpart(spam ~ ., data = train)
+library(randomForest)
+set.seed(123)
+spamRF <- randomForest(spam ~ ., data = train)
+```
+
+Then we can obtain the predicted probabilities using each of the three models,
+```{r 1_m2}
+predictLog <- predict(spamLog, newdata = train, type = "response")
+predictCART <- predict(spamCART, newdata = train)
+predictRF <- predict(spamRF, newdata = train, type = "prob")
+predictCART <- predictCART[,2]
+predictRF <- predictRF[,2]
+```
+
+To get the probabilities that lie in thresholds, we will use the `table()` function,
+```{r 1_m3}
+table(predictLog < 0.0001)["TRUE"]
+table(predictLog > 0.9999)["TRUE"]
+table(predictLog >= 0.0001 & predictLog <= 0.9999)["TRUE"]
+```
+
+`r table(predictLog < 0.0001)["TRUE"]` of the training set from `spamLog` are less than 0.0001. `r table(predictLog > 0.9999)["TRUE"]` of the training set from `spamLog` are more than 0.9999. `r table(predictLog >= 0.0001 & predictLog <= 0.9999)["TRUE"]` of the training set are between 0.0001 and 0.9999.
+
+## (n)
+Q: How many variables are labeled as significant (at the p=0.05 level) in the logistic regression summary output?
+
+A: 
+```{r 1_n}
+names(which(coef(summary(spamLog))[,4] < 0.05))
+```
+
+None of the variables are significant at the p = 0.05 level. Note that there was also trouble for the logistic regression model to converge in this example.
+
+## (o)
+Q: How many of the word stems "enron", "hou", "vinc", and "kaminski" appear in the CART tree? Recall that we suspect these word stems are specific to Vincent Kaminski and might affect the generalizability of a spam filter built with his ham data.
+
+A: We comment out the intended way of doing this question below. We leave a much quicker and easier way:
+```{r 1_o}
+# library(rpart.plot)
+# prp(spamCART)
+intersect(spamCART$frame[,1], c("enron", "hou", "vinc", "kaminski"))
+```
+
+```{r 1_o_EASY_ALIAS, include = FALSE}
+x <- intersect(spamCART$frame[,1], c("enron", "hou", "vinc", "kaminski"))
+```
+Only the words ``r x[1]`` and ``r x[2]`` of the four given words appear in the CART tree.
+
+## (p)
+Q: What is the training set accuracy of `spamLog`, using a threshold of 0.5 for predictions? What is the training set AUC of `spamLog`?
+
+A: In this question we will get repeated questions of accuracy and AUC, so defining functions is useful:
+
+```{r 1_p1, message = FALSE}
+library(ROCR)
+# even shorter function names are advisable
+# but we can be explicit in this document
+accuracy <- function(predict_object, data, threshold=0.5) {
+  return(sum(diag(table(predict_object >= threshold, data))) /
+           sum(table(predict_object >= threshold, data)))
+}
+auc <- function(predict_object, data) {
+  prediction_obj <- prediction(predict_object, data)
+  perf_obj <- performance(prediction_obj, measure = "auc")
+  return(perf_obj@y.values[[1]])
+}
+```
+
+We get the training set accuracy first,
+```{r 1_p2}
+accuracy(predictLog, train$spam)
+```
+
+\needspace{10\baselineskip}
+For the AUC,
+```{r 1_p3}
+auc(predictLog, train$spam)
+```
+The training set accuracy of `spamLog` is `r accuracy(predictLog, train$spam)`. The training set AUC of `spamLog` is `r auc(predictLog, train$spam)`.
+
+\needspace{14\baselineskip}
+## (q)
+Q: What is the training set accuracy of `spamCART`, using a threshold of 0.5 for predictions?
+
+A: 
+```{r 1_q}
+accuracy(predictCART, train$spam)
+```
+The training set accuracy of `spamCART` is `r accuracy(predictCART, train$spam)`.
+
+## (r)
+Q: What is the training set AUC of `spamCART`? (Remember that you have to pass the prediction function predicted probabilities.)
+
+A: 
+```{r 1_r}
+auc(predictCART, train$spam)
+```
+The training set AUC of `spamCART` is `r auc(predictCART, train$spam)`.
+
+## (s)
+Q: What is the training set accuracy of `spamRF`, using a threshold of 0.5 for predictions? (Remember that your have to use type="prob" in your prediction for random forest.)
+
+A: 
+```{r 1_s}
+accuracy(predictRF, train$spam)
+```
+The training set accuracy of `spamRF` is `r accuracy(predictRF, train$spam)`.
+
+## (t)
+Q: What is the training set AUC of `spamRF`? (Remember to pass the argument type="prob"to the predict function to get predicted probabilities for a random forest model. The probabilities will be the second column of the output.)
+
+A: 
+```{r 1_t}
+auc(predictRF, train$spam)
+```
+The training set AUC of `spamRF` is `r auc(predictRF, train$spam)`.
+
+## (u)
+Q: Which of the models have the best training set performance, in terms of accuracy and AUC?
+
+  * Logistic regression
+  * CART
+  * Random forest
+
+A: In this case, logistic regression and random forest have the best performances.
+
+## (v)
+Q: Obtain predicted probabilities for the testing set for each of the models, again ensuring that probabilities instead of classes are obtained. What is the testing set accuracy of `spamLog`, using a threshold of 0.5 for predictions?
+
+A: We predict on the test set, (or rather, make `predict` objects out of the test set)
+```{r 1_v1}
+predLogtest <- predict(spamLog, newdata = test, type = "response")
+predCARTtest <- predict(spamCART, newdata = test)
+predRFtest <- predict(spamRF, newdata = test, type = "prob")
+predCARTtest <- predCARTtest[,2]
+predRFtest <- predRFtest[,2]
+```
+
+\needspace{8\baselineskip}
+And then obtain the accuracy of the logistic regression,
+```{r 1_v2}
+accuracy(predLogtest, test$spam)
+```
+The testing set accuracy of `spamLog` is `r accuracy(predLogtest, test$spam)`.
+
+## (w)
+Q: What is the testing set AUC of `spamLog`? What is the testing set accuracy of `spamCART`, using a threshold of 0.5 for predictions? What is the testing set AUC of `spamCART`? What is the testing set accuracy of `spamRF`, using a threshold of 0.5 for predictions?
+What is the testing set AUC of `spamRF`?
+
+\needspace{10\baselineskip}
+A: 
+```{r 1_w1}
+method_str <- sprintf("%-20s" ,
+                      c("Logistic Regression",
+                        "CART",
+                        "Random Forest")
+                      )
+big_test_obj <- cbind(predLogtest, predCARTtest, predRFtest)
+for (pred_idx in 1:3) {
+  if (pred_idx %in% c(2,3)) {  # not logistic regression
+    print(paste0(method_str[pred_idx],
+                 sprintf("%-12s", " accuracy"),
+                 accuracy(big_test_obj[,pred_idx], test$spam)))
+  }
+  print(paste0(method_str[pred_idx],
+               sprintf("%-12s", " AUC"),
+               auc(big_test_obj[,pred_idx], test$spam)))
+
+}
+```
+
+The testing set AUC of `spamLog` is `r auc(predLogtest, test$spam)`. The testing set accuracy of `spamCART` is `r accuracy(predCARTtest, test$spam)`. The testing set AUC of `spamCART` is `r auc(predCARTtest, test$spam)`. The testing set accuracy of `spamRF` is `r accuracy(predRFtest, test$spam)`. The testing set AUC of `spamRF` is `r auc(predRFtest, test$spam)`.
+
+## (x)
+Q: Which model had the best testing set performance, in terms of accuracy and AUC?
+
+  * Logistic regression
+  * CART
+  * Random forest
+
+A:  The random forest has the most impressive performance in the test set both in terms of accuracy and AUC.
+
+## (y)
+Q: Which model demonstrated the greatest degree of overfitting?
+
+  * Logistic regression
+  * CART
+  * Random forest
+
+A: Logistic regression - it had an almost perfect fit on the training set but not as good performance on the test set. On the other hand, CART and random forest models have similar accuracies in the training and test sets.
+
+```{r 1_end, include = SETUP_INCLUDE_QUESTION_END_BOOLEAN}
+setdiff(ls(), ls(pattern = "SETUP"))
+rm(list = setdiff(ls(), ls(pattern = "SETUP")))
+```
