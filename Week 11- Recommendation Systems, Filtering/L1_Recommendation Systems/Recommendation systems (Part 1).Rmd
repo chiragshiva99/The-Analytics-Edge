@@ -98,7 +98,7 @@ plot(clusterMovies1)
 Let's now cut the dendrogram into 10 clusters and compute the average value across the clusters for the Action variable. Higher value indicates many movies in the clusters are action movies.
 
 ```{r}
-clusterGroups1 <- cutree(clusterMovies1, k=10)
+clusterGroups1 <- cutree(clusterMovies1, k=10) #cutting for the dendogram
 tapply(Data[,1], clusterGroups1, mean) 
 ```
 
