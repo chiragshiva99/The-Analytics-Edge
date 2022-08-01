@@ -1,0 +1,929 @@
+---
+title: "Week 11 Exercise Solutions"
+output:
+  html_document: 
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    highlight: tango
+  pdf_document:
+    template: footmiscbeforehyperref.tex # footmisc, and spacing adjustments
+    fig_caption: true
+    highlight: tango
+geometry: margin=1in
+fontsize: 12pt
+linkcolor: blue
+header-includes:
+  - \usepackage{mathtools}  # for pmatrix*
+  - \usepackage[sfdefault]{FiraSans}  # any font would work
+  - \usepackage[T1]{fontenc}
+  - \renewcommand*\oldstylenums[1]{{\firaoldstyle \#1}}
+  - \usepackage{needspace}  # for nice page spaces
+  - \setlength\footnotemargin{0.4em}  # not inside template
+  - \newcommand{\specialcell}[2][c]{\begin{tabular}[#1]{@{}c@{}}#2\end{tabular}}  # to multiline text in tabular
+  - \usepackage{sectsty} \sectionfont{\centering\LARGE}\subsectionfont{\large}  # to change header fonts in PDF
+  - \usepackage{hyperref}  # load after everything else
+editor_options: 
+  chunk_output_type: inline
+---
+
+<style type="text/css">
+h1 {
+  text-align: center;
+}
+h2 {
+  font-size: 24px
+}
+h3 {
+  font-size: 20px
+}
+</style>
+
+```{r setup1, include=FALSE}
+SETUP_start_time <- Sys.time()  # to measure knitting time
+
+knitr::opts_knit$set(global.par = TRUE)
+knitr::opts_chunk$set(echo = TRUE)
+SETUP_LATEX_FLAG <- knitr::is_latex_output()  # to differentiate HTML/PDF output
+
+# From write_matex2 by https://stackoverflow.com/a/54088015
+SETUP_rmat_to_tex <- function(x, IS_LATEX=SETUP_LATEX_FLAG) {
+  if (IS_LATEX) {
+    begin <- "\\begin{pmatrix*}[r]"
+    end <- "\\end{pmatrix*}"
+  } else {
+    begin <- "\\begin{pmatrix}"  # there is no MathTools in MathJax
+    end <- "\\end{pmatrix}"
+  }
+  
+  X <-
+    apply(x, 1, function(x) {
+      paste(
+        paste(x, collapse = "&"),
+        "\\\\"
+      )
+    })
+  paste(c(begin, X, end), collapse = "")
+}
+
+# Inspired from above
+SETUP_rchar_vec_to_tex <- function(x) {
+  begin <- "\\begin{pmatrix}\\text{"
+  end <- "}\\end{pmatrix}"
+  x <- paste(x, collapse = "}\\\\\\text{")
+  paste(c(begin, x, end), collapse = "")
+}
+
+# For adding the beta
+SETUP_rchar_vec_to_beta_tex <- function(x) {
+  begin <- "\\begin{pmatrix}\\beta_{\\text{"
+  end <- "}}\\end{pmatrix}"
+  x <- paste(x, collapse = "}}\\\\\\beta_{\\text{")
+  paste(c(begin, x, end), collapse = "")
+}
+SETUP_specify_decimal <- function(x, k) trimws(format(round(x, k), nsmall = k))
+
+SETUP_INCLUDE_QUESTION_END_BOOLEAN <- FALSE  # set false before final export
+```
+
+# Question 1
+## (a)
+Q: Load **StocksCluster.csv** into a data frame called **stocks**. How many observations are in the dataset?
+
+A: 
+```{r 1_a}
+# load csv into dataframe `stocks`
+stocks <- read.csv("StocksCluster.csv")
+nrow(stocks) # number of rows
+```
+
+There are `r nrow(stocks)` observations in the dataset.
+
+## (b)
+Q: What proportion of the observations have positive returns in December?
+
+A: 
+```{r 1_b}
+(table(stocks$PositiveDec)/nrow(stocks))["1"]
+```
+
+`r (table(stocks$PositiveDec)/nrow(stocks))["1"]` of the observations have positive returns in December.
+
+## (c)
+Q: What is the maximum correlation between any two return variables in the dataset? You should look at the pairwise correlations between `ReturnJan`, `ReturnFeb`, `ReturnMar`, `ReturnApr`, `ReturnMay`, `ReturnJune`, `ReturnJuly`, `ReturnAug`, `ReturnSep`, `ReturnOct`, and `ReturnNov`.
+
+\needspace{8\baselineskip}
+A: Assuming we are looking for the most positive correlation,
+```{r 1_c}
+# get the correlation matrix -> remove diagonal (all ones)
+# -> then find the maximum (most positive correlation)
+max(cor(stocks[,1:11]) - diag(rep(1, 11)))
+```
+The maximum correlation between any two return variables in the dataset is `r max(cor(stocks[,1:11]) - diag(rep(1, 11)))`.
+
+Note that, were two variables perfectly negatively correlated, they would not have positive correlation. It is important to see if one is looking for the most positive correlation or greatest absolute correlation.
+
+## (d)
+Q: Which month (from January through November) has the largest mean return across all observations in the dataset? Which month (from January through November) has the smallest mean return across all observations in the dataset?
+
+A:
+```{r 1_d}
+# sort the solumn means in order -> get names (variables)
+names(sort(colMeans(stocks[,1:11]), decreasing = TRUE)[1])  # largest
+names(sort(colMeans(stocks[,1:11]), decreasing = FALSE)[1])  # smallest
+```
+
+April has the largest average return while September has the smallest (most negative) average return.
+
+## (e)
+Q: Run the following commands to split the data into a training set and testing set, putting 70% of the data in the training set and 30% of the data in the testing set:
+
+`> set.seed(144)`\linebreak
+`> spl <- sample.split(stocks$PositiveDec, SplitRatio = 0.7)`\linebreak
+`> stocksTrain <- subset(stocks, spl == TRUE)`\linebreak
+`> stocksTest <- subset(stocks, spl == FALSE)`
+
+Then, use the `stocksTrain` data frame to train a logistic regression model (name it `StocksModel`) to predict `PositiveDec` using all the other variables as independent variables. What is the overall accuracy on the training set, using a threshold of 0.5? (A possible way to do this is to write a function to calculate accuracy.)
+
+\needspace{8\baselineskip}
+A:
+```{r 1_e1}
+set.seed(144)
+library(caTools)
+
+# split dataset - 70% training, 30% testing
+spl <- sample.split(stocks$PositiveDec, SplitRatio = 0.7)
+stocksTrain <- subset(stocks, spl == TRUE)
+stocksTest <- subset(stocks, spl == FALSE)
+# build logistic regression model
+stocksModel <- glm(PositiveDec ~ ., data = stocksTrain,
+                   family = "binomial")
+# predict using model on training set
+stocksPredict <- predict(stocksModel, newdata = stocksTrain,
+                         type = "response")
+```
+
+Given that we will be asked to get the accuracy a lot, it is easier to define a function now,
+```{r 1_e2}
+accuracy <- function(predict_object, data, threshold=0.5) {
+  return(sum(diag(table(predict_object >= threshold, data))) / length(data))
+}
+accuracy(stocksPredict, stocksTrain$PositiveDec) #threshold 0.5
+```
+
+The overall accuracy of the model on the training set is `r sum(diag(table(stocksPredict >= 0.5, stocksTrain$PositiveDec)))/nrow(stocksTrain)`.
+
+## (f)
+Q: Now obtain test set predictions from `StocksModel`. What is the overall accuracy of the model on the test set, again using a threshold of 0.5?
+
+A:
+```{r 1_f}
+stocksPredicttest <- predict(stocksModel, newdata = stocksTest,
+                             type = "response")
+accuracy(stocksPredicttest, stocksTest$PositiveDec)
+```
+
+The overall accuracy of the model on the test set is `r accuracy(stocksPredicttest, stocksTest$PositiveDec)`.
+
+\needspace{14\baselineskip}
+## (g)
+Q: What is the accuracy on the test set of a baseline model that always predicts the most common outcome in the training set?
+
+A:
+```{r 1_g}
+most_common <- names(sort(table(stocksTrain$PositiveDec),
+                          decreasing = TRUE)[1])
+# baseline model predicts 1 always
+table(stocksTest$PositiveDec)[most_common]/nrow(stocksTest)
+```
+
+The accuracy on the test set of a baseline model that always predicts the most common outcome in the training set is `r table(stocksTest$PositiveDec)[most_common]/nrow(stocksTest)`.
+
+## (h)
+Q: Now, let's cluster the stocks. The first step in this process is to remove the dependent variable using the following commands:
+
+`> limitedTrain <- stocksTrain`\linebreak
+`> limitedTrain$PositiveDec <- NULL`\linebreak
+`> limitedTest <- stocksTest`\linebreak
+`> limitedTest$PositiveDec <- NULL`
+
+Why do we need to remove the dependent variable in the clustering phase of the cluster-then-predict methodology?
+
+i. Leaving in the dependent variable might lead to unbalanced clusters
+ii. Removing the dependent variable decreases the computational effort needed to cluster
+iii. Needing to know the dependent variable value to assign an observation to a cluster defeats the purpose of the methodology
+
+A:
+```{r 1_h}
+limitedTrain <- stocksTrain
+limitedTrain$PositiveDec <- NULL
+limitedTest <- stocksTest
+limitedTest$PositiveDec <- NULL
+```
+
+We remove the dependent variable because needing to know the dependent variable value to assign an observation to a cluster defeats the purpose of the methodology.
+
+## (i)
+Q: In some cases where we have a training and testing set, we might want to normalize by the mean and standard deviation of the variables in the training set. We can do this by using the `caret` package passing just the training set to the preProcess function, which normalizes variables by subtracting by the mean and dividing by the standard deviation.
+
+`> library(caret)`\linebreak
+`> preproc <- preProcess(limitedTrain)`\linebreak
+`> normTrain <- predict(preproc, limitedTrain)`\linebreak
+`> normTest <- predict(preproc, limitedTest)`
+
+What is the mean of the `ReturnJan` variable in `normTrain`?
+
+What is the mean of the `ReturnJan` variable in `normTest`?
+
+A:
+```{r 1_i}
+library(caret)
+# normalise variables -> predict -> find mean
+preproc <- caret::preProcess(limitedTrain)
+
+normTrain <- predict(preproc, limitedTrain)
+normTest <- predict(preproc, limitedTest)
+
+mean(normTrain$ReturnJan)
+mean(normTest$ReturnJan)
+```
+
+The mean of the `ReturnJan` variable in `normTrain` is `r format(mean(normTrain$ReturnJan), scientific = FALSE)`^[Note that comparison of this value has revealed differences as compared to running `colMeans(normTrain)["ReturnJan]`. This is likely due to floating point error. It is difficult to say without further evidence which function has greater precision, although `mean` should have greater precision.]. The mean of the `ReturnJan` variable in `normTest` is `r format(mean(normTest$ReturnJan), scientific = FALSE)`.
+
+## (j)
+Q: Why is the mean `ReturnJan` variable much closer to 0 in `normTrain` than in `normTest`?
+
+i. Small rounding errors exist in the normalization procedure
+ii. The distribution of the `ReturnJan` variable is different in the training and testing set
+iii. The distribution of the dependent variable is different in the training and testing set
+
+A: The distribution of the ReturnJan variable is different in the training and testing set.
+
+## (k)
+Q: Set the random seed to 144 (it is important to do this again, even though we did it earlier). Run k-means clustering with 3 clusters on `normTrain`, storing the result in an object called `km`. Which cluster has the largest number of observations?
+
+i. Cluster 1
+ii. Cluster 2
+iii. Cluster 3
+
+A:
+```{r 1_k}
+set.seed(144)
+km <- kmeans(normTrain, centers = 3)
+names(sort(table(km$cluster), decreasing = TRUE)[1])
+```
+Cluster `r names(sort(table(km$cluster), decreasing = TRUE)[1])` has the largest number of observations.
+
+## (l)
+Q: In this question, we use the `flexclust` package to obtain training set and testing set cluster assignments for our observations and to do the predictions. Use the following commands:
+
+`> library(flexclust)`\linebreak
+`> km.kcca <- as.kcca(km, normTrain)`\linebreak
+`> clusterTrain <- predict(km.kcca)`\linebreak
+`> clusterTest <- predict(km.kcca, newdata=normTest)`
+
+How many test-set observations were assigned to Cluster 2?
+
+A:
+```{r 1_l}
+library(flexclust)
+km.kcca <- as.kcca(km, normTrain)
+clusterTrain <- predict(km.kcca)
+clusterTest <- predict(km.kcca, newdata = normTest)
+unname(table(clusterTest)["2"])
+```
+
+`r table(clusterTest)["2"]` test-set observations were assigned to Cluster 2.
+
+## (m)
+Q: Using the subset function, build data frames `stocksTrain1`, `stocksTrain2`, and `stocksTrain3`, containing the elements in the `stocksTrain` data frame assigned to clusters 1, 2, and 3, respectively (be careful to take subsets of `stocksTrain`, not of `normTrain`). Similarly build `stocksTest1`, `stocksTest2`, and `stocksTest3` from the `stocksTest` data frame. Which training set data frame has the highest average value of the dependent variable?
+
+A:
+```{r 1_m}
+# not recommended
+# recommended way is to use a list to contain all models
+stocksTrain1 <- subset(stocksTrain, clusterTrain == 1)
+stocksTrain2 <- subset(stocksTrain, clusterTrain == 2)
+stocksTrain3 <- subset(stocksTrain, clusterTrain == 3)
+stocksTest1 <- subset(stocksTest, clusterTest == 1)
+stocksTest2 <- subset(stocksTest, clusterTest == 2)
+stocksTest3 <- subset(stocksTest, clusterTest == 3)
+mean(stocksTrain1$PositiveDec)
+mean(stocksTrain2$PositiveDec)
+mean(stocksTrain3$PositiveDec)
+```
+
+`stocksTrain1` has the observations with highest average value of the dependant variable.
+
+## (n)
+Q: Build logistic regression models `StocksModel1`, `StocksModel2`, and `StocksModel3`, which predict `PositiveDec` using all the other variables as independent variables. `StocksModel1` should be trained on `stocksTrain1`, `StocksModel2` should be trained on `stocksTrain2`, and `StocksModel3` should be trained on `stocksTrain3`. Which variables have a positive sign for the coefficient in at least one of `StocksModel1`, `StocksModel2`, and `StocksModel3` and a negative sign for the coefficient in at least one of `StocksModel1`, `StocksModel2`, and `StocksModel3`?
+
+\needspace{8\baselineskip}
+A:
+```{r 1_n}
+StocksModel1 <- glm(PositiveDec ~ ., data = stocksTrain1, family = "binomial")
+StocksModel2 <- glm(PositiveDec ~ ., data = stocksTrain2, family = "binomial")
+StocksModel3 <- glm(PositiveDec ~ ., data = stocksTrain3, family = "binomial")
+stock_returns <- colnames(stocksTrain)[1:11]
+# put all coefficients of model into a single matrix
+coef_mat <- cbind(coef(StocksModel1)[stock_returns], 
+                  coef(StocksModel2)[stock_returns], 
+                  coef(StocksModel3)[stock_returns])
+# find variables where coefficients in all models have different "sign"
+# ie not all positive or all negative
+names(which(!(apply(coef_mat > 0, 1, all) | apply(coef_mat < 0, 1, all))))
+```
+
+```{r 1_n_EASY_ALIAS, include = FALSE}
+x <- names(which(!(apply(coef_mat > 0, 1, all) | apply(coef_mat < 0, 1, all))))
+RETURNS_1_N <- paste0("`" , x[-length(x)], "`", collapse = ", ")
+```
+
+The variables `r RETURNS_1_N` and ``r tail(x, 1)`` have coefficients of at least one positive sign and a negative signs in the models.
+
+## (o)
+Q: Using `StocksModel1`, make test-set predictions called `PredictTest1` on the data frame `stocksTest1`. Using `StocksModel2`, make test-set predictions called `PredictTest2` on the data frame `stocksTest2`. Using `StocksModel3`, make test-set predictions called `PredictTest3` on the data frame `stocksTest3`.
+
+What is the overall accuracy of `StocksModel1` on the test set `stocksTest1`, using a threshold of 0.5?
+
+What is the overall accuracy of `StocksModel2` on the test set `stocksTest2`, using a threshold of 0.5?
+
+What is the overall accuracy of `StocksModel3` on the test set `stocksTest3`, using a threshold of 0.5?
+
+A: 
+```{r 1_o}
+PredictTest1 <- predict(StocksModel1, newdata = stocksTest1, type = "response")
+PredictTest2 <- predict(StocksModel2, newdata = stocksTest2, type = "response")
+PredictTest3 <- predict(StocksModel3, newdata = stocksTest3, type = "response")
+
+# get the accuracy for each case
+accuracy(PredictTest1, stocksTest1$PositiveDec)
+accuracy(PredictTest2, stocksTest2$PositiveDec)
+accuracy(PredictTest3, stocksTest3$PositiveDec)
+```
+
+The overall accuracy of `StocksModel1` on the test set `stocksTest1`, is `r accuracy(PredictTest1, stocksTest1$PositiveDec)`. The overall accuracy of `StocksModel2` on the test set `stocksTest2`, is `r accuracy(PredictTest2, stocksTest2$PositiveDec)`. The overall accuracy of `StocksModel3` on the test set `stocksTest3`, is `r accuracy(PredictTest3, stocksTest3$PositiveDec)`.
+
+## (p)
+Q: To compute the overall test-set accuracy of the cluster-then-predict approach, we can combine all the test-set predictions into a single vector and all the true outcomes into a single vector:
+
+`> AllPredictions <- c(PredictTest1, PredictTest2, PredictTest3)`\linebreak
+`> AllOutcomes <- c(stocksTest1$PositiveDec, stocksTest2$PositiveDec, stocksTest3$PositiveDec)`
+
+What is the overall test-set accuracy of the cluster-then-predict approach, again using a threshold of 0.5?
+
+A:
+```{r 1_p}
+AllPredictions <- c(PredictTest1, PredictTest2, PredictTest3)
+AllOutcomes <- c(stocksTest1$PositiveDec, stocksTest2$PositiveDec,
+                 stocksTest3$PositiveDec)
+accuracy(AllPredictions, AllOutcomes)
+```
+
+The overall test-set accuracy of the cluster-then-predict approach is `r accuracy(AllPredictions, AllOutcomes)`.
+
+```{r 1_end, include = SETUP_INCLUDE_QUESTION_END_BOOLEAN}
+setdiff(ls(), ls(pattern = "SETUP"))
+rm(list = setdiff(ls(), ls(pattern = "SETUP")))
+```
+\pagebreak
+
+# Question 2
+## (a)
+Q: Read the dataset into the dataframe **citi**. How many bike stations are there in this dataset?
+
+A:
+```{r 2_a}
+citi <- read.csv("citibike.csv", stringsAsFactors = FALSE)
+length(unique(c(citi$startstation, citi$endstation)))
+```
+
+There are `r length(unique(c(citi$startstation, citi$endstation)))` bike stations in this dataset.
+
+## (b)
+Q: On which day of the week, is the average duration of the trips taken by bikers the maximum?
+
+A:
+```{r 2_b}
+# get average tripduration of each day -> sort according to means, starting with longest duration -> get the day with the longest trip
+names(sort(tapply(citi$tripduration, citi$day, mean), decreasing = TRUE)[1])
+```
+The average duration of the trips taken by bikers is the maximum on Saturday.
+
+## (c)
+Q: What is the start hour when the maximum number of bikes are rented? What is the start hour when the minimum number of bikes are rented?
+
+A:
+```{r 2_c}
+names(which.max(table(citi$starttime)))
+names(which.min(table(citi$starttime)))
+```
+The start hour when the maximum number of bikes are rented is 6 pm. The start hour when the minimum number of bikes are rented is 4 am.
+
+## (d)
+Q: In this dataset, what proportion of the bikes are rented by female users?
+
+A:
+```{r 2_d}
+unname(table(citi$gender)["2"]/nrow(citi))
+```
+In this dataset, `r table(citi$gender)["2"]/nrow(citi)` of the bikes are rented by female users.
+
+## (e)
+Q: One of the challenges to do clustering with this data is the presence of the categorical variable for the **day** variable. To tackle this, we will define seven new binary variables (**Mon** to **Sun**), each of which takes a value of 1 if the corresponding trip is taken on that day and 0 otherwise. Write down one such sample R command(s) that you use to do this for a given day of the week.
+
+A:
+```{r 2_e}
+days <- unique(citi$day) # all the days in this dataset
+
+# for each day, create a new column 
+# add 1 if the day is the day of the trip
+for (day in days) {
+  citi[day] <- as.integer(citi$day == day)
+}
+```
+We iterate through all the days and call `as.integer()` as required.
+
+## (f)
+Q: In clustering data, it is often important to normalize the variables so that they are all on the same scale. If you clustered this dataset without normalizing, which variable would you expect to dominate in the distance calculations?
+
+* **tripduration**
+* **gender**
+* **age**
+* **starttime**
+* **Mon**
+
+A: It is relatively easy to check the scale of each column, we do so by checking the max of the relevant columns.
+```{r 2_f}
+apply(citi[c("tripduration", "gender", "age", "starttime", "Mon")], 2, max)
+```
+The variable `tripduration` is likely to dominate in the distance calculations.
+
+## (g)
+Q: Normalize the variables **tripduration, gender, age, starttime, Mon, ..., Sun** by using the **scale()** function in R. We normalize such that each variable has mean 0 and standard deviation 1. What is the maximum value of **tripduration** in the normalized dataset?
+
+A:
+```{r 2_g}
+citi_norm <- citi
+# only normalise numerical variables (use scale())
+vars_to_norm <- setdiff(names(citi), c("startstation", "endstation", "day"))
+citi_norm[vars_to_norm] <- apply(citi_norm[vars_to_norm], 2, scale)
+# find the maximum tripduration after scaling
+max(citi_norm$tripduration)
+```
+
+The maximum value of `tripduration` in the normalized dataset is `r max(citi_norm$tripduration)`.
+
+## (h)
+Q: We will not use hierarchical clustering for this dataset. Why do you think hierarchical clustering might have a problem with this dataset?
+
+* We have categorical variables in this dataset, so we cannot use hierarchical clustering.
+* We might have too many variables in the dataset for hierarchical clustering to handle.
+* We might have too many observations in the dataset for hierarchical clustering to handle.
+* We are sure of the number of clusters in this application, so using hierarchical clustering does not make sense.
+
+A: We might have too many observations in the dataset for hierarchical clustering to handle.
+
+## (i)
+Q: Run the k-means algorithm on the normalized dataset with 10 clusters. Use `set.seed(100)` in R just before running the code. You only want to use the variables `tripduration`, `gender`, `age`, `starttime`, `Mon`, ..., `Sun` in building your clusters. Use the default settings to build your model. How many trips are there in the largest and smallest clusters respectively?
+
+A:
+```{r 2_i}
+set.seed(100)
+# k means clustering with normalised variables, k=10 (clusters)
+km_i <- kmeans(citi_norm[,vars_to_norm], centers = 10)
+
+# $size: number of observations (trips) in each cluster
+min(km_i$size)
+max(km_i$size)
+```
+
+There are `r max(km_i$size)` and `r min(km_i$size)` trips in the largest and smallest clusters respectively.
+
+## (j) {#twoj}
+Q: Which cluster best fits the description "trips taken primarily by older users on Saturdays"? You can use the centers of the clusters to answer this question.
+
+* This question requires an older system of seeding. (This will not happen in the exam.) Use the following commands:
+  
+  `> RNGversion("3.5.3")` \linebreak
+  `> set.seed(100)`
+
+* At the end of question 2, use the following commands to change back the RNG:
+
+  `> RNGVersion(paste0(version[c(“major”,”minor”)], collapse=”.”))`
+
+
+A: Unfortunately, this question refers to the older system of seeding, so to reproduce that, we will use the old system of seeding. **This will not happen in the exam**.
+```{r 2_j1}
+RNGversion("3.5.3")
+set.seed(100)
+# k means clustering with normalised variables, k=10 (clusters)
+km_j <- kmeans(citi_norm[,vars_to_norm], centers = 10)
+
+# select relevant variables to inspect
+# older users - age (+), saturdays - Sat (+)
+var_j <- c("age", "Sat")
+km_j$centers[,var_j]
+```
+
+By manual inspection of the clusters, it seems that cluster 5 is the best fit for the statement. There is no 'easy' way to computationally do this, since it is not a priori clear which cluster is considered old and if a cluster is considered active at a particular day.
+
+\needspace{16\baselineskip}
+Still, the following code can calculate for the sums of euclidean distance between different quantiles of the normalised values and the cluster centers,
+```{r 2_j2}
+# function which gives the closest clusters for each quantile
+print_closest_by_quantiles <- function(km_obj, input_variables) {
+  for (p in seq(0.8, 1, 0.05)) {
+  print(paste(sprintf("%-6s", p),
+              which.min(apply(
+                (apply(citi_norm[input_variables],
+                       2, quantile, probs = p) - 
+                       t(km_obj$centers[,input_variables])) ^ 2,
+                2, sum))
+              )
+        )
+  }
+}
+```
+
+And we can just use it,
+```{r 2_j3}
+print_closest_by_quantiles(km_j, var_j)
+```
+
+This shows that the center of cluster 5 is the closest to the 90-th percentile (and above) of the normalised values in `age` and `Sat`.
+
+## (k)
+Q: Which cluster best fits the description "longer trips taken primarily by female users either on Tuesdays or Wednesdays"? You can use the centers of the clusters to answer this question.
+
+A:
+```{r 2_k1}
+# longer trips - tripduration (+), female - gender (+), Tues or Weds - Tue/Wed (+)
+var_k <- c("gender", "Tue", "Wed")
+km_j$centers[,var_k]
+```
+
+By manual inspection of the clusters, it seems that cluster 10 is the best fit for the statement. We follow [(j)](#twoj),
+```{r 2_k2}
+print_closest_by_quantiles(km_j, var_k)
+```
+
+This shows that the center of cluster 10 is the closest to the 85-th percentile (and above) of the normalised values in `gender`, `Tue` and `Wed`.
+
+## (l)
+Q: If we ran k-means clustering a second time without making any additional calls to `set.seed`, we would expect
+
+* Different results from the first k-means clustering
+* Identical results to the first k-means clustering
+
+A: Different results - we can only replicate results if we use the same seed.
+
+## (m)
+Q: If we ran k-means clustering a second time, again running the command `set.seed(100)` right before doing the clustering, we would expect
+
+* Different results from the first k-means clustering
+* Identical results to the first k-means clustering
+
+A: Identical results to the first k-means clustering.
+
+## (n)
+Q: Suppose the marketing department at Citi Bike decided that instead of using the days of the week for clustering, they would like to use a single variable weekday which took a value of 1 if the trip started on Monday, Tuesday, Wednesday, Thursday, or Friday and 0 if it started on a Saturday or Sunday. Redo the clustering. As before, remember to normalize the weekday variable and run the k-means algorithm on the normalized dataset with 10 clusters. Use set.seed(100) in R before running the code. Which cluster best fits the description "longer trips taken by older female users on weekdays"? You can use the centers of the clusters to answer this question.
+
+\needspace{6\baselineskip}
+A:
+```{r 2_n1}
+# create new variable 'weekday' - weekends correspond to 0, weekdays 1
+weekend_days <- c("Sat", "Sun") 
+citi_norm$weekday <- as.integer(!(citi$day %in% weekend_days))
+# normalise variable 'weekday'
+citi_norm$weekday <- scale(citi_norm$weekday)
+
+set.seed(100)
+# k means clusering for selected variables
+cluster_var <- c("tripduration", "gender", "age", "starttime", "weekday")
+km_l <- kmeans(citi_norm[,cluster_var], centers = 10)
+# longer trips - tripduration (+), older - age (+), females - gender (+), weekdays - weekday (+)
+var_n <- c("tripduration", "gender", "age", "weekday")
+km_l$centers[,var_n]
+```
+
+By manual inspection of the clusters, it seems that cluster 1 is the best fit for the statement.
+
+```{r 2_n2}
+print_closest_by_quantiles(km_l, var_n)
+```
+This shows that the center of cluster 1 is the closest to the 80-th percentile (and above) of the normalised values in `tripduration`, `gender`, `age` and `weekday`.
+
+## (o)
+Q: Which cluster best fits the description "short trips taken by younger male users early on weekdays"? You can use the centers of the clusters to answer this question.
+
+A:
+```{r 2_o1}
+# short trips - tripduration (-), young - age (-), male - gender(-)
+# early - starttime (-), weekdays - weekday (+)
+var_o <- c("tripduration", "age", "gender", "starttime", "weekday")
+km_l$centers[,var_o]
+```
+
+By manual inspection of the clusters, it seems that cluster 9 is the best fit for the statement.
+
+For this part, we note that while we need `tripduration`, `age`, `gender` and `starttime` to be as negative as possible, we want `weekday` to be as positive as possible. In fact, in all of the previous parts, all of the variables should be as positive as possible so that the function would work. 
+
+Since this is the last part, we will opt to just transform the data,
+```{r 2_o2}
+neg_to_pos <- c("tripduration", "age", "gender", "starttime")
+km_l$centers[,neg_to_pos] <- -km_l$centers[,neg_to_pos]
+# after transforming the data, we want all the selected variables to be as positive as possible
+```
+
+And print the function.
+```{r 2_o3}
+print_closest_by_quantiles(km_l, var_o)
+```
+
+This shows that the center of cluster 4 is also a very close cluster to the statement while the center of cluster 9 is the closest to the maximum values of the transformed normalised values in `tripduration`, `age`, `gender`, `starttime` and `weekday`.
+
+Finally, we change back the RNG,
+```{r 2_o4}
+RNGversion(paste0(version[c("major","minor")], collapse = "."))
+```
+
+```{r 2_end, include = SETUP_INCLUDE_QUESTION_END_BOOLEAN}
+setdiff(ls(), ls(pattern = "SETUP"))
+rm(list = setdiff(ls(), ls(pattern = "SETUP")))
+```
+\pagebreak
+
+# Question 3
+## Preamble
+Q: In this question, you will extend the collaborative filtering model from the class. In the class we developed three models for collaborative filtering—using average item rating, using average user rating and by taking the average of the k nearest users using the Pearson correlation metric. In this question, you will extend the last model by using a weighted average where the weights are the similarity metric defined by the Pearson correlation. Develop an R code to do this and verify the quality of the fit by changing the number of neighbors in the set {10,50,100,150,200,250}. Compute the root mean squared error in each of these cases.
+
+A: We adopt the code as used in the lesson,
+```{r 3_1}
+# Load the ratings dataset
+ratings <- read.csv("ratings.csv")
+
+# Create an empty matrix with 706 rows (users) and 8552 (movies)
+Data <- matrix(nrow = length(unique(ratings$userId)),
+               ncol = length(unique(ratings$movieId)))
+
+# We name the rows and columns with the
+# unique users and movieid in the dataset
+rownames(Data) <- unique(ratings$userId)
+colnames(Data) <- unique(ratings$movieId)
+
+# Fill in the matrix
+for (i in 1:nrow(ratings)) {
+  Data[as.character(ratings$userId[i]),
+       as.character(ratings$movieId[i])] <- ratings$rating[i]
+}
+```
+
+Splitting the data,
+```{r 3_2}
+# split the data into "train" and "test" set
+# we will use the correlation between the train and test set users
+# as weights to predict the test users ratings on test set movies
+# ie rating of test movie i = mean(rating of train movies*correlation between train and test users)
+
+set.seed(1) # rows = user id
+spl1 <- sample(1:nrow(Data), 0.98*nrow(Data)) # spl1 has 98% of the rows
+spl1c <- setdiff(1:nrow(Data), spl1)          # spl1c has the remaining ones
+set.seed(2) # columns = movies
+spl2 <- sample(1:ncol(Data), 0.8*ncol(Data))  # spl2 has 80% of the columns
+spl2c <- setdiff(1:ncol(Data), spl2)          # spl2c has the rest
+UserPred <- matrix(nrow = length(spl1c), ncol = length(spl2c))
+```
+
+## Dealing with Correlation
+We will need to modify the code from this point on for convenience because we do need the correlation data as the code in class simply replaces the correlation data again and again so only the final correlation data is kept, (note that warnings are suppressed)
+```{r 3_3, warning = FALSE}
+# Keep track of the correlation between users
+Cor <- matrix(nrow = length(spl1c), ncol =  length(spl1))
+# Sort users in term of decreasing correlations
+Order <- matrix(nrow = length(spl1c), ncol = length(spl1))
+
+# Absolute correlations
+AbsCor <- matrix(nrow = length(spl1c), ncol =  length(spl1))
+AbsOrder <- matrix(nrow = length(spl1c), ncol = length(spl1))
+
+# For distance correlation
+for (i in 1:length(spl1c)) {
+  for (j in 1:length(spl1)) {
+    # fill in Cor matrix with correlation data pairwise
+    Cor[i, j] <- cor(Data[spl1c[i],spl2],
+                     Data[spl1[j], spl2],
+                     use = "pairwise.complete.obs")
+  }
+  # arrange in decreasing correlations # rows = "test" user
+  V <- order(Cor[i,], decreasing = TRUE, na.last = NA)
+  # record the order of (column) indexes corresponding to decreasing correlations
+  Order[i,] <- c(V, rep(NA, times = length(spl1) - length(V)))
+  # get absolute correlation and order accordingly
+  AbsCor[i,] <- abs(Cor[i,])
+  absV <- order(AbsCor[i,], decreasing = TRUE, na.last = NA)
+  AbsOrder[i,] <- c(absV, rep(NA, times = length(spl1) - length(V)))
+}
+```
+
+First of all, we are limited by the correlations within the data,
+```{r 3_4}
+num_correlated <- apply(Order, 1, function(x){sum(!is.na(x))})
+num_correlated
+```
+We note that there is one user (i.e., no. 4) for which correlation is defined for only 209 users.
+
+Secondly, we need to find out exactly how we can weight negative correlations so we can predict properly. For example, when the neighbour set size is 250, what should be done with the negatively weighted correlations?
+```{r 3_5}
+format(round(sort(Cor[14,], decreasing = TRUE)[200:250], 2), nsmall = 2)
+```
+
+### Ignore Negative Correlations
+Our first method is to ignore all negative correlations and set them to 0, as a weight of 0 is essentially ignored in weighted averages.
+```{r 3_6}
+num_neighbors_set <- c(10, 50, 100, 150, 200, 250)
+# create matrix to store rmse from each model
+RMSE_table <- matrix(nrow = 5, ncol = length(num_neighbors_set))
+
+# for each neighbour set, find the corresponding RMSE
+for (k in 1:length(num_neighbors_set)) {
+  # for each user in test set
+  for (i in 1:length(spl1c)) {
+    # set negative correlation to zero
+    # select the desired number of neighbours
+    non_neg_cor <- replace(Cor[i,][Order[i,]],
+                           which(Cor[i,][Order[i,]] < 0),
+                           0)[1:num_neighbors_set[k]]
+    
+    # extract corresponding ratings from Data matrix
+    # apply weighted means with the weights as non_neg_cor(correlation)
+    
+    # for each user id in test set:
+    # select the first n_neighbour column ids (w highest corr) from Order
+  # extract from Data matrix (row-train set users, col-test set movies) #CHECK
+    UserPred[i,] <- apply(Data[spl1[Order[i, 1:num_neighbors_set[k]]], spl2c],
+                          2, weighted.mean, 
+                          # use weight = ordered correlations
+                          w = non_neg_cor, na.rm = TRUE
+                          )
+  }
+  # update RMSE table row 2 - root mean sq error of model ignoring negative correlations
+  
+  # true rating: test set user ratings from Data matrix (row-test set user id, col-test set movies)
+  # predicted rating: correlation as weights*rating of train set users
+  RMSE_table[2, k] <- sqrt(mean((Data[spl1c, spl2c] - UserPred)^2, na.rm = TRUE))
+}
+```
+
+Note that we can also reproduce what the original model gave using equal weights,
+```{r 3_7}
+# for each neighbour set, find the RMSE
+for (k in 1:length(num_neighbors_set)) {
+  # for each user in test set
+  for (i in 1:length(spl1c)) {
+    UserPred[i,] <- apply(Data[spl1[Order[i, 1:num_neighbors_set[k]]], spl2c],
+                          2, weighted.mean,
+                          # use weight = 1 for all
+                          w = rep(1, times = num_neighbors_set[k]),
+                          na.rm = TRUE
+                          )
+  }
+  # update RMSE table row 1 - root mean sq error of original model (equal weights)
+  RMSE_table[1, k] <- sqrt(mean((Data[spl1c, spl2c] - UserPred)^2, na.rm = TRUE))
+}
+```
+
+### Rescaling Correlations
+We can try to rescale the correlations to within the interval $\left[0, 1\right]$. But we need some helper functions,
+```{r 3_8}
+# function to check if all entries in a given vector are equal (or within tolerance)
+all_equal_within_vector <- function(x, tol=10^-6) {
+  if (!anyNA(x)) {
+    return(all(abs(x - mean(x)) < tol))
+  }
+  else {
+    return(FALSE)
+  }
+}
+
+# function to rescale given vector if entries are not equal (or exceeds tolerance)
+rescale <- function(x) {
+  if (all_equal_within_vector(x)) {
+    return(x)
+  }
+  else {
+    return(x - min(x))/(max(x) - min(x))
+  }
+}
+```
+
+Predicting,
+```{r 3_9}
+for (k in 1:length(num_neighbors_set)) {
+  for (i in 1:length(spl1c)) {
+    UserPred[i,] <- apply(Data[spl1[Order[i, 1:num_neighbors_set[k]]], spl2c],
+                          2, weighted.mean,
+                          # use w = scaled correlations
+                          w = rescale(Cor[i,][Order[i,]][1:num_neighbors_set[k]]),
+                          na.rm = TRUE
+                          )
+  }
+  # update RMSE table row 3 - root mean sq error of model w scaled correlations
+  RMSE_table[3, k] <- sqrt(mean((Data[spl1c, spl2c] - UserPred)^2, na.rm = TRUE))
+}
+```
+
+This method is not ideal in the sense that 0 would map to 0.5 and -1 would map to 0. Essentially, this gives greater weight to positively correlated users, and positive weight to uncorrelated users. 
+
+### Remapping Negative Correlations
+Next, we will map the negative correlations to their 'opposite' value. For example, for two perfectly correlated users, a rating of 5 means a rating of 0.5 for the other. A rating of 4.5 means a rating of 1.0 for the other. For correlations of absolute values between 0 and 1, they will be scaled against the mean of the whole rating scale, so if two users have correlation -0.5, a rating of 5 indicates a rating of 1.625 for the other. 
+
+Further, we will use the absolute correlations to order the correlations^[This would be the same as using $r^2$ to order them, since both $x^{2}$ and $\lvert x\rvert$ behave identically in terms of monotonicity in disjoint regions of positive and negative numbers]. This means more highly-correlated (positively or negatively) users will be more important in prediction,
+```{r 3_10}
+# function to get 'opposite' correlations
+f <- function(val, cor) {
+  return(2.75 + (val - 2.75)*cor)
+}
+for (k in 1:length(num_neighbors_set)) {
+  for (i in 1:length(spl1c)) {
+    data_i <- Data[spl1[AbsOrder[i, 1:num_neighbors_set[k]]], spl2c]
+    # mapping negative correlations to opposite values
+    x_i <- f(data_i, Cor[i,][AbsOrder[i,]][1:num_neighbors_set[k]])
+    UserPred[i,] <- apply(x_i, 2, weighted.mean,
+                          # use w = correlation ordered by abs values
+                          w = (AbsCor[i,][AbsOrder[i,]][1:num_neighbors_set[k]]),
+                          na.rm = TRUE
+                          )
+  }
+  # update RMSE table row 4 - root mean sq error of model w correlations ordered by abs values
+  RMSE_table[4, k] <- sqrt(mean((Data[spl1c,spl2c] - UserPred)^2,na.rm = TRUE))
+}
+```
+
+### Distance Correlation
+(Note: this method does not answer the question as the question requires use of the Pearson correlation coefficient)
+
+Our next method utilises distance correlation, which by definition lies within $\left[0, 1\right]$. The function we will use does not work very well with missing values and vectors of non-equal length. Hence, we will first remove all missing values and then we will take a sample of size equal to the smaller vector and take their distance correlation,
+```{r 3_11, warnings = FALSE}
+# install.packages('energy') # select 'no' for binary prompt
+library(energy)
+dCor <- matrix(nrow = length(spl1c), ncol =  length(spl1))
+dOrder <- matrix(nrow = length(spl1c), ncol = length(spl1))
+
+# for each user in test set, find (ordered) distance correlation
+for (i in 1:length(spl1c)) {
+  # for each user in train set
+  for (j in 1:length(spl1)) {
+    # movie ratings by user in test set
+    x_1 <- Data[spl1c[i],spl2] 
+    x_1 <- x_1[!is.na(x_1)]
+    # movie ratings by user in train set
+    x_2 <- Data[spl1[j], spl2] 
+    x_2 <- x_2[!is.na(x_2)]
+    
+    # check lengths after removing na
+    if (length(x_1) <= length(x_2)) {
+      # if x2 is longer, 'extend' x2 by their difference
+      x_2 <- sample(x_2, length(x_1))
+    } else {
+      # if x1 is longer, 'extend' x1 by their difference
+      x_1 <- sample(x_1, length(x_2))
+    }
+    # find distance correlation for (x1, x2)
+    dCor[i, j] <- dcor(x_1, x_2)
+  }
+  # order distance correlation from biggest to smallest
+  V <- order(dCor[i,], decreasing = TRUE)
+  # fill in matrix with V (fill extra spaces with NA)
+  dOrder[i,] <- c(V, rep(NA, times = length(spl1) - length(V)))
+}
+```
+
+```{r 3_12}
+for (k in 1:length(num_neighbors_set)) {
+  for (i in 1:length(spl1c)) {
+    UserPred[i,] <- apply(Data[spl1[dOrder[i, 1:num_neighbors_set[k]]], spl2c],
+                          2, weighted.mean,
+                          # use w = ordered distance correlation
+                          w = dCor[i,][dOrder[i,]][1:num_neighbors_set[k]],
+                          na.rm = TRUE
+                          )
+  }
+  RMSE_table[5, k] <- sqrt(mean((Data[spl1c, spl2c] - UserPred)^2, na.rm = TRUE))
+}
+```
+
+## Results
+```{r 3_13}
+colnames(RMSE_table) <- num_neighbors_set
+rownames(RMSE_table) <- c("Original", "Ignore", "Rescaling", "Remapping",
+                          "Distance")
+RMSE_table
+```
+
+From the table, it seems that simpler methods like using the correlation-ordering with equal weights and ignoring negative values by setting them to 0 is more accurate on the test set than any of the alternatives.
+
+```{r 3_end, include = SETUP_INCLUDE_QUESTION_END_BOOLEAN}
+setdiff(ls(), ls(pattern = "SETUP"))
+rm(list = setdiff(ls(), ls(pattern = "SETUP")))
+```
