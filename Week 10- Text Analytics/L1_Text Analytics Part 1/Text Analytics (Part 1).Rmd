@@ -14,7 +14,6 @@ output:
 First, we prepare the working environment.
 ```{r}
 rm(list=ls()) # Clear the environment
-# setwd("...")  # Setup the working directory
 ```
 
 
