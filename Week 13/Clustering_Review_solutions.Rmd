@@ -1,0 +1,218 @@
+---
+title: "Clustering_Review"
+author: "Foo Lin Geng"
+date: "Term 6, 2020"
+output: 
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+    toc: true
+    toc_depth: 3
+    number_sections: true
+---
+
+First, we prepare the working environment.
+```{r}
+rm(list=ls()) # Clear the environment
+# setwd("...")  # Setup the working directory
+```
+
+
+# Pollution dataset
+
+This datasets was proposed in McDonald, G.C. and Schwing, R.C. (1973) 'Instabilities of regression estimates relating air pollution to mortality', Technometrics, vol.15, 463-482. It contains 16 attributes describing 60 different pollution scenarios. The attributes are the following: 
+
+1) PRECReal: Average annual precipitation in inches 
+2) JANTReal: Average January temperature in degrees F 
+3) JULTReal: Same for July 
+4) OVR65Real: of 1960 SMSA population aged 65 or older 
+5) POPNReal: Average household size 
+6) EDUCReal: Median school years completed by those over 22 
+7) HOUSReal: of housing units which are sound and with all facilities 
+8) DENSReal: Population per sq. mile in urbanized areas, 1960 
+9) NONWReal: non-white population in urbanized areas, 1960 
+10) WWDRKReal: employed in white collar occupations 
+11) POORReal: of families with income less than $3000 
+12) HCReal: Relative hydrocarbon pollution potential 
+13) NOXReal: Same for nitric oxides 
+14) SOReal: Same for sulphur dioxide 
+15) HUMIDReal: Annual average % relative humidity at 1pm 
+16) MORTReal: Total age-adjusted mortality rate per 100,000
+
+```{r}
+pollution <- read.csv("pollution.csv")
+#str(pollution)
+```
+
+A quick look at the dataframe:
+
+```{r}
+head(pollution) # First part of the dataframe
+summary(pollution) # Summary of the data
+```
+
+
+# Hierarchical clustering
+
+First, use the function `dist` to calculate the distance between entries (rows) using all columns of data. Then, execute hierarchical clustering using Ward's distance.
+
+```{r}
+distances <- dist(pollution, method="euclidean")
+clusterpollution1 <- hclust(distances, method="ward.D2")
+```
+
+Plot the dendrogram.
+
+```{r}
+plot(clusterpollution1) 
+```
+
+Let's now cut the dendrogram into 4 clusters and compute the average value across the clusters for the MORTReal variable.
+
+```{r}
+clusterGroups1 <- cutree(clusterpollution1, k=4)
+tapply(pollution$MORTReal, clusterGroups1, mean) 
+```
+
+Create a matrix "Centroids" containing the centroids of each cluster, where rows denote variables and columns indicate clusters
+
+```{r}
+Centroid <- matrix(0,nrow=16,ncol=4)
+for(i in 1:16)
+{Centroid[i,] <- tapply(pollution[,i], clusterGroups1, mean)}
+rownames(Centroid) <- colnames(pollution)[1:16]
+Centroid
+```
+
+Looking at `Centroid`, we can observe that DENSReal and MORTReal are the variables with the most variation, and the data is clustered primarily according to those two variables.
+
+Let's plot at the clustering result along DENSReal and MORTReal, with the color differentiating the clusters:
+```{r}
+plot(pollution$DENSReal,pollution$MORTReal, col=clusterGroups1, pch=19)
+```
+
+This is not natural.
+That shows the importance of scaling. We need to scale our data for better performance!
+Scale the data using the scale() function and repeat the steps above to display the dendrogram.
+
+```{r}
+pollution_scaled = data.frame(scale(pollution)) 
+colnames(pollution_scaled) = names(pollution)
+distances_scaled <- dist(pollution_scaled, method="euclidean")
+clusterpollution2 <- hclust(distances_scaled, method="ward.D2")
+plot(clusterpollution2) 
+```
+
+
+Let's  do the same as before: cut the dendrogram into 4 clusters and plot it along DENSReal and MORTReal, with points colored according to their group.
+```{r}
+clusterGroups2 <- cutree(clusterpollution2, k=4)
+plot(pollution_scaled$DENSReal,pollution_scaled$MORTReal, col=clusterGroups2, pch=19)
+```
+
+We observe that the clusters show much more overlap than before as expected. This shows the importance of scaling the data!
+
+Now, let's plot 3 different plots (all with the points colored according to their group):
+1) HCReal vs MORTReal
+2) NOXReal vs MORTReal
+3) SOReal vs MORTReal
+```{r}
+plot(pollution_scaled$HCReal,pollution_scaled$MORTReal, col=clusterGroups2, pch=19)
+plot(pollution_scaled$NOXReal,pollution_scaled$MORTReal, col=clusterGroups2, pch=19)
+plot(pollution_scaled$SOReal,pollution_scaled$MORTReal, col=clusterGroups2, pch=19)
+```
+
+# K-means clustering
+
+First set the seed.
+
+```{r}
+set.seed(1)
+```
+
+Perform a K-means clustering using k=4 and 20 random initial configurations. Print the total within cluster sum of squares.
+
+```{r}
+clusterpollution3 <- kmeans(pollution_scaled,centers=4,nstart=20)
+clusterpollution3$tot.withinss 
+```
+
+Let's now vary the value of k and plot the error in the cluster as a function of k:
+
+```{r}
+set.seed(1)
+fit <- 0
+for(k in 1:15)
+{clusterpollution4 <- kmeans(pollution_scaled, centers=k, nstart=20)
+fit[k] <- clusterpollution4$tot.withinss}
+plot(1:15,fit)
+```
+
+<!-- Let's see the corresponding clusters when there are 4 clusters: -->
+
+<!-- ```{r} -->
+<!-- Centroid2 <- matrix(0,nrow=16,ncol=4) -->
+<!-- for(i in 1:16) -->
+<!-- {Centroid2[i,] <- tapply(pollution_scaled[,i], clusterpollution3$cluster, mean)} -->
+<!-- rownames(Centroid2) <- colnames(pollution_scaled)[1:16] -->
+<!-- Centroid2 -->
+<!-- ``` -->
+
+Now, let's plot 3 different plots (all with points colored according to their group):
+1) HCReal vs MORTReal
+2) NOXReal vs MORTReal
+3) SOReal vs MORTReal
+```{r}
+plot(pollution_scaled$HCReal,pollution_scaled$MORTReal, col=clusterpollution3$cluster, pch=19)
+plot(pollution_scaled$NOXReal,pollution_scaled$MORTReal, col=clusterpollution3$cluster, pch=19)
+plot(pollution_scaled$SOReal,pollution_scaled$MORTReal, col=clusterpollution3$cluster, pch=19)
+```
+
+The results look very similar to the one obtained from hierarchical clustering.
+
+# BONUS: PCA on top of K-means
+## Please do not panic. This is just cool, and good to know.
+
+Let's use PCA in order to better visualize the classes!
+
+```{r}
+pr.out<-prcomp(pollution_scaled,scale=F)
+#summary(pr.out) 
+pve<-pr.out$sdev^2/sum(pr.out$sdev^2)
+cpve<-cumsum(pve)
+plot(cpve,xlab="Principal components",type="l",ylim=c(0,1))
+```
+
+
+```{r}
+library(factoextra)
+fviz_pca_biplot(pr.out, label = "var", habillage=clusterpollution3$cluster,addEllipses=TRUE, ellipse.level=0.95)
+```
+
+We observe one group that has more education, more white-collar jobs and  better housing units (also higher HC,NOX pollution).
+Another group has more poorer families, higher mortaility rates, higher non-white populaion.
+It seems like, in this dataset, the potential for pollution (in the area) is not linked to mortality rates.
+
+For convenience:
+1) PRECReal: Average annual precipitation in inches 
+2) JANTReal: Average January temperature in degrees F 
+3) JULTReal: Same for July 
+4) OVR65Real: of 1960 SMSA population aged 65 or older 
+5) POPNReal: Average household size 
+6) EDUCReal: Median school years completed by those over 22 
+7) HOUSReal: of housing units which are sound and with all facilities 
+8) DENSReal: Population per sq. mile in urbanized areas, 1960 
+9) NONWReal: non-white population in urbanized areas, 1960 
+10) WWDRKReal: employed in white collar occupations 
+11) POORReal: of families with income less than $3000 
+12) HCReal: Relative hydrocarbon pollution potential 
+13) NOXReal: Same for nitric oxides 
+14) SOReal: Same for sulphur dioxide 
+15) HUMIDReal: Annual average % relative humidity at 1pm 
+16) MORTReal: Total age-adjusted mortality rate per 100,000
+
+
+
+
+
+
