@@ -1,0 +1,379 @@
+---
+title: "Water_network"
+author: "Abhishek"
+date: "12/1/2020"
+output: html_document
+---
+
+## Premise on the data
+
+The dataset given in the folder is named as "water_network.csv". The dataset explains Water distribution networks that are infrastructures designed to deliver water
+within urban environments. Their operation relies on several sensors,
+which can help operators spot abnormal conditions, such as the
+malfunctioning of a pump or a pipe leakage. For this problem, we will
+work with the dataset water_network.csv, which contains a few months
+of data provided by a water utility. The dataset contains 18,423
+observations and the following 45 variables.
+
+## Description of 45 variables
+
+DATETIME = date and time of each observation;
+
+LEVEL_T1, T2, T3, T4, T5, T6, T7 = water level (in m) measured in 7 tanks;
+
+PRESS_J280, J269, J300, J256, J289, J415, J302, J306, J307, J317, J14, J422 = water pressure (in m) measured in 12 junctions of the network;
+
+FLOW_PU1, PU2, PU3, PU4, PU5, PU6, PU7, PU8, PU9, PU10, PU11 = flow (l/s) through 11 pumps;
+
+FLOW_V2 = flow (l/s) through one valve;
+
+STATUS_PU1, PU2, PU3, PU4, PU5, PU6, PU7, PU8, PU9, PU10, PU11 = status (Boolean, False for OFF/CLOSED, True for ON/OPEN) of each pump;
+
+STATUS_V2 = status (Boolean, False for OFF/CLOSED, True for ON/OPEN) of one valve;
+
+ANOMALY = anomaly in the system (Boolean, False for NORMAL OPERATING CONDITIONS, True for ABNORMAL CONDITIONS).
+
+## Final goal will be to build a predictive model for the variable ANOMALY with respect to other relevant variables.
+
+We keep this review question open ended. 
+Obviously 45 variables may be a little overwhelming to handle with. Few helping guidelines will be following:
+
+- One must explore the variables and screen the important variables to begin with.
+- Then use GLM/CART/Random forest based methods to find the best possible predictive model that make uses of small set of important variables.
+
+
+
+
+
+```{r}
+rm(list=ls())
+water1 <- read.csv("water_network.csv")
+str(water1)
+head(water1)
+summary(water1)
+```
+## Further insights and exploration on the data
+
+
+It seems few variables are extremely sparse. Those variables are FLOW_PU3, FLOW_PU5, FLOW_PU9.
+
+```{r}
+a=setdiff(dput(names(water1)),c("DATETIME","FLOW_PU3", "FLOW_PU5", "FLOW_PU9"))
+water=subset(water1[,a])
+```
+## Still the number of variables is overwhelming. Now how to reduce the set of variables further.
+
+1. Are Status variables at all important when flows are present?
+2. What about status_V2?
+
+```{r}
+summary(water$STATUS_PU6[which(water$FLOW_PU6<=0.5)])
+summary(water$STATUS_PU6)
+plot(water$FLOW_PU6)
+
+#summary(water$STATUS_V2[which(water$FLOW_V2<=1)])
+#summary(water$STATUS_V2)
+```
+
+Removing all Status variables and preparing the output variable Anomaly.
+
+```{r}
+water$Anomaly= as.numeric(water$ANOMALY)
+a1=setdiff(dput(names(water)),c("STATUS_PU1", "STATUS_PU2", "STATUS_PU3", "STATUS_PU4", 
+"STATUS_PU5", "STATUS_PU6", "STATUS_PU7", "STATUS_PU8", "STATUS_PU9", 
+"STATUS_PU10", "STATUS_PU11", "STATUS_V2","ANOMALY"))#Prepare relevant variables
+water0=subset(water[,a1])
+water=water0
+str(water)
+```
+
+
+
+
+# Splitting the data set
+To split the data into two groups (for training and testing) using the package `caTools`.
+```{r}
+if(!require(caTools)){                          # install or load the package
+  install.packages("caTools")
+  library(caTools)
+}
+set.seed(123)                                   # set seed for random sampling
+spl <- sample.split(water$Anomaly,SplitRatio=0.7) # We use 70% of the data for training
+train <- subset(water,spl==TRUE);             # training dataset
+test <- subset(water,spl==FALSE);             # testing dataset
+```
+
+
+
+
+
+
+## GLM
+
+```{r}
+glm_1 <- glm(Anomaly ~ ., family = "binomial", data = train)
+summary(glm_1)
+b=names(which(coef(summary(glm_1))[,4] < 0.05))
+names(sort(coef(summary(glm_1))[which(coef(summary(glm_1))[,4] < 0.05),4]))
+```
+So the important variables are (sorted as minimum to maximum p-value)
+
+ "LEVEL_T7"   "FLOW_PU6"   "LEVEL_T6"   "PRESS_J289" "PRESS_J300" "FLOW_PU7"   "FLOW_PU4"  
+ "LEVEL_T1"   "PRESS_J422" "FLOW_V2"    "LEVEL_T2"   "PRESS_J280" "PRESS_J256" "PRESS_J415"
+ "LEVEL_T4"   "PRESS_J317"
+ 
+- Out of 7 tanks only 5 tanks' levels are important, with LEVEL_T7,Level_T6 having lowest P-values : "LEVEL_T1"   "LEVEL_T2"   "LEVEL_T4"   "LEVEL_T6"   "LEVEL_T7"
+ 
+- Water pressures in 7 junctions out of 12 are important: "PRESS_J280" "PRESS_J300"
+  "PRESS_J256" "PRESS_J289" "PRESS_J415" "PRESS_J317" "PRESS_J422"
+ 
+- Water flows in 3 "FLOW_PU4"   "FLOW_PU6"  "FLOW_PU7" out of 11 pumps and flow of one valve  "FLOW_V2" is important.
+ 
+ 
+ 
+ 
+ 
+ 
+## Prediction accuracy of the model based on test set based on full model
+
+```{r}
+pred_1_b <- predict(glm_1, newdata = test, type = "response")
+table_1_b <- table(test$Anomaly, pred_1_b >= 0.5)
+sum(diag(table_1_b))/sum(table_1_b)
+```
+
+
+## If we work on a reduced set of predictors along with Anomaly how much prediction accuracy can be ensured?
+
+
+
+```{r}
+# Water with reduced variable set
+water2<-subset(water[,c("LEVEL_T7","FLOW_PU6","LEVEL_T6","PRESS_J289","PRESS_J300","FLOW_PU7", "FLOW_PU4","LEVEL_T1","PRESS_J422","FLOW_V2","LEVEL_T2","PRESS_J280","PRESS_J256","PRESS_J415","LEVEL_T4","PRESS_J317","Anomaly")])
+
+# Train+Test set generation
+set.seed(1234)                                   # set seed for random sampling
+spl2 <- sample.split(water2$Anomaly,SplitRatio=0.7) # We use 70% of the data for training
+train2 <- subset(water2,spl2==TRUE);             # training dataset
+test2 <- subset(water2,spl2==FALSE);             # testing dataset
+
+# GLM2 + Prediction accuracy on test set with threshold 0.5
+glm_2 <- glm(Anomaly ~ ., family = "binomial", data = train2)
+pred_1_b <- predict(glm_2, newdata = test2, type = "response")
+table_1_b <- table(test2$Anomaly, pred_1_b >= 0.5)
+sum(diag(table_1_b))/sum(table_1_b)
+
+# Baseline Accuracy
+base_1 <- names(table(train2$Anomaly)[which.max(table(train2$Anomaly))])
+unname(table(test2$Anomaly)[base_1]/sum(nrow(test2)))
+
+```
+## The model is 
+"Logit(P[Anomaly=1])= b'X"
+where
+X= (Intercept,LEVEL_T7,FLOW_PU6,LEVEL_T6,PRESS_J289,PRESS_J300,FLOW_PU7, FLOW_PU4,LEVEL_T1,PRESS_J422,FLOW_V2,LEVEL_T2,PRESS_J280,PRESS_J256,PRESS_J415,
+LEVEL_T4,PRESS_J317)'
+
+b=(201.03701300,  -1.48582141,    0.28760446,    5.10460244,  138.53081753, -131.06884434,    0.12710309,    -0.50975626,    1.44995974,   -7.77626682,    0.04643830,    0.49710959,  -77.13782193,    0.29835449,    -0.03707398,   -0.34731030,   -0.03598858).
+
+
+
+94.42% is the prediction accuracy with the reduced set of predictors based on test set (with threshold = 0.5).
+
+89.32513% is the baseline accuracy for the testing set.
+
+
+
+## Benchmark model (CART) 
+
+
+It is not immediately clear which variables are more important than the others, especially due to the large number of factor variables in this problem. Let us now build a classification tree to predict “Anomaly”. Use the training set to build the model, and all of the other variables as independent variables. Use the default parameters. After building the model we plot the resulting tree.
+ 
+
+```{r}
+library(rpart)
+#install.packages("rpart.plot")
+library(rpart.plot)
+
+```
+
+
+
+Our benchmark model is a CART. We first grow a deep tree and then check whether it is necessary to prune it.
+
+
+
+```{r}
+
+
+cart1 <- rpart(train2$Anomaly~ .,data=train2,method="class") # build the tree
+prp(cart1) # Plot the tree
+predictcart1 <- predict(cart1,newdata=test2,type="class") # prediction on the test dataset
+table(test2$Anomaly,predictcart1) # confusion matrix
+sum(diag(table(test2$Anomaly,predictcart1)))/sum(table(test2$Anomaly,predictcart1)) # Accuracy
+```
+
+The model accuracy is ```sum(diag(table(test2$Anomaly,predictcart1)))/sum(table(test2$Anomaly,predictcart1))```.
+
+Let us do some pruning
+
+```{r}
+opt <- which.min(cart1$cptable[,"xerror"]) # get index of CP with lowest xerror
+cp <- cart1$cptable[opt, "CP"]             # get the corresponding value
+cart2 <- prune(cart1,cp)                   # prune
+prp(cart2)
+
+predictcart2 <- predict(cart2,newdata=test2,type="class") # prediction on the test dataset on the pruned tree
+table(test2$Anomaly,predictcart2)               # confusion matrix
+sum(diag(table(test2$Anomaly,predictcart2)))/sum(table(test2$Anomaly,predictcart2))
+```
+The model accuracy is ```r sum(diag(table(test2$Anomaly,predictcart2)))/sum(table(test2$Anomaly,predictcart2))```.
+
+
+
+
+# Bagging
+
+
+```{r}
+if(!require(ipred)){
+  install.packages("ipred")
+  library(ipred)}
+mt <- bagging (as.factor(train2$Anomaly)~.,data=train2, coob=TRUE)
+print(mt)
+
+#Predict in test data
+predict_bag_model <- predict(mt,newdata=test2,type="class")
+table(test2$Anomaly,predict_bag_model)
+
+#Accuracy
+sum(diag(table(test2$Anomaly,predict_bag_model)))/sum(table(test2$Anomaly,predict_bag_model))
+
+```
+
+
+# Random forest
+
+```{r}
+if(!require(randomForest)){
+  #install.packages("randomForest")
+  library(randomForest)}
+
+forest <- randomForest(as.factor(Anomaly)~.,data=train)
+forest
+
+# Accuracy in test data
+predictforest <- predict(forest,newdata=test,type="class")
+table(test$Anomaly,predictforest)
+sum(diag(table(test$Anomaly,predictforest)))/sum(table(test$Anomaly,predictforest))
+
+#importance of predictors
+importance(forest) # tabulated results
+varImpPlot(forest) # plot
+
+#Using varUsed
+varUsed(forest, by.tree=FALSE, count=TRUE)
+```
+
+
+
+
+
+
+
+
+
+
+
+## Can we make models based on only just six predictors that are 
+FLOW_PU6,LEVEL_T1, FLOW_PU7,LEVEL_T4,PRESS_J415,LEVEL_T7
+
+
+
+
+
+
+
+
+
+## We will bring all approaches
+
+```{r}
+# Water with reduced variable set
+water3<-subset(water[,c("FLOW_PU6","LEVEL_T1", "FLOW_PU7","LEVEL_T4","PRESS_J415","LEVEL_T7","Anomaly")])
+
+# Train+Test set generation
+set.seed(12345)                                   # set seed for random sampling
+spl3 <- sample.split(water3$Anomaly,SplitRatio=0.7) # We use 70% of the data for training
+train3 <- subset(water3,spl3==TRUE);             # training dataset
+test3 <- subset(water3,spl3==FALSE);             # testing dataset
+
+# GLM3 + Prediction accuracy on test set with threshold 0.5
+glm_3 <- glm(Anomaly ~ ., family = "binomial", data = train3)
+pred_1_b <- predict(glm_3, newdata = test3, type = "response")
+table_1_b <- table(test3$Anomaly, pred_1_b >= 0.5)
+sum(diag(table_1_b))/sum(table_1_b)
+
+# Baseline Accuracy
+base_1 <- names(table(train3$Anomaly)[which.max(table(train3$Anomaly))])
+unname(table(test3$Anomaly)[base_1]/sum(nrow(test3)))
+
+
+```
+The prediction accuracy in test set for GLM3 is 93.30% compared to 94.42% given by GLM2.
+
+Now we do the CART without and with pruning based on water3.
+
+```{r}
+cart3 <- rpart(train3$Anomaly~ .,data=train3,method="class") # build the tree
+prp(cart3) # Plot the tree
+predictcart3 <- predict(cart3,newdata=test3,type="class") # prediction on the test dataset
+table(test3$Anomaly,predictcart3) # confusion matrix
+sum(diag(table(test3$Anomaly,predictcart3)))/sum(table(test3$Anomaly,predictcart3)) # Accuracy
+```
+Prediction accuracy is 97.24% based on the test set compared to 98.58% in cart2. 
+
+
+
+# Bagging
+
+
+```{r}
+if(!require(ipred)){
+  install.packages("ipred")
+  library(ipred)}
+mt3 <- bagging (as.factor(train3$Anomaly)~.,data=train3, coob=TRUE)
+print(mt3)
+
+#Predict in test data
+predict_bag_model <- predict(mt3,newdata=test3,type="class")
+table(test3$Anomaly,predict_bag_model)
+
+#Accuracy
+sum(diag(table(test3$Anomaly,predict_bag_model)))/sum(table(test3$Anomaly,predict_bag_model))
+
+```
+
+#Out-of-bag estimate of misclassification error for mt3 is  0.0179 in comparison with 0.0091 by mt.
+
+
+
+# Random forest
+
+```{r}
+
+forest3 <- randomForest(as.factor(train3$Anomaly)~.,data=train3)
+forest3
+
+# Accuracy in test data
+predictforest <- predict(forest3,newdata=test3,type="class")
+table(test3$Anomaly,predictforest)
+sum(diag(table(test3$Anomaly,predictforest)))/sum(table(test3$Anomaly,predictforest))
+
+#importance of predictors
+importance(forest3) # tabulated results
+varImpPlot(forest3) # plot
+
+#Using varUsed
+varUsed(forest3, by.tree=FALSE, count=TRUE)
+```
